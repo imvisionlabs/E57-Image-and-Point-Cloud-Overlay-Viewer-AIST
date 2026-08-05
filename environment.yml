@@ -1,0 +1,14 @@
+name: e57-fusion-viewer
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - numpy>=1.24
+  - pillow>=10.0
+  - pyside6>=6.6
+  - setuptools>=68
+  - pip:
+      - pye57>=0.4.18
+      - pyinstaller>=6.0
