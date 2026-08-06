@@ -33,5 +33,6 @@ Thumbs.db
 *.log
 
 # Local data (large / user-specific)
+data/
 examples/*
 !examples/.gitkeep
