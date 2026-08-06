@@ -135,18 +135,13 @@ def parse(xml_path: Path, e57_path: Path, out_dir: Path):
         "cameras": [],
     }
 
-    scan_guid_to_index = {}
-    for scan_index, scan in enumerate(root.findall("./e57:data3D/e57:vectorChild", NS)):
+    for scan in root.findall("./e57:data3D/e57:vectorChild", NS):
         pose = scan.find("e57:pose", NS)
         rot = pose.find("e57:rotation", NS) if pose is not None else None
         tr = pose.find("e57:translation", NS) if pose is not None else None
-        scan_guid = val(scan.find("e57:guid", NS))
-        if scan_guid:
-            scan_guid_to_index[scan_guid] = scan_index
         result["data3d"].append(
             {
-                "scan_index": scan_index,
-                "guid": scan_guid,
+                "guid": val(scan.find("e57:guid", NS)),
                 "name": val(scan.find("e57:name", NS)),
                 "rotation_wxyz": [
                     f(rot.find("e57:w", NS), 1) if rot is not None else 1,
@@ -162,7 +157,7 @@ def parse(xml_path: Path, e57_path: Path, out_dir: Path):
             }
         )
 
-    for image_index, im in enumerate(root.findall("./e57:images2D/e57:vectorChild", NS)):
+    for im in root.findall("./e57:images2D/e57:vectorChild", NS):
         pin = im.find("e57:pinholeRepresentation", NS)
         pose = im.find("e57:pose", NS)
         if pin is None or pose is None:
@@ -176,11 +171,7 @@ def parse(xml_path: Path, e57_path: Path, out_dir: Path):
 
         guid = val(im.find("e57:guid", NS))
         name = val(im.find("e57:name", NS), guid + (".jpg" if jpg is not None else ".png"))
-        associated_guid = val(im.find("e57:associatedData3DGuid", NS))
-        scan_index = scan_guid_to_index.get(associated_guid)
-        camera_id_source = guid if guid and guid != "0000000000000000" else associated_guid
-        camera_id = f"image_{image_index:04d}_{safe(camera_id_source or name)}"
-        fname = f"{image_index:04d}_{safe(name)}"
+        fname = safe(name)
         if jpg is not None and not fname.lower().endswith((".jpg", ".jpeg")):
             fname += ".jpg"
         if png is not None and not fname.lower().endswith(".png"):
@@ -197,18 +188,9 @@ def parse(xml_path: Path, e57_path: Path, out_dir: Path):
         ph = f(pin.find("e57:pixelHeight", NS))
         result["cameras"].append(
             {
-                "camera_id": camera_id,
-                "image_index": image_index,
                 "guid": guid,
                 "name": name,
                 "image_path": str(Path("images") / fname),
-                "associated_data3d_guid": associated_guid,
-                "scan_index": scan_index,
-                "points_path": (
-                    f"points_scan_{scan_index:03d}.npz"
-                    if scan_index is not None
-                    else "points.npz"
-                ),
                 "width": i(pin.find("e57:imageWidth", NS)),
                 "height": i(pin.find("e57:imageHeight", NS)),
                 "focal_length_mm": focal,

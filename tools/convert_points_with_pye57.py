@@ -147,31 +147,11 @@ def apply_scan_pose(xyz, metadata, scan_index):
     return xyz @ R.T + t[None, :]
 
 
-def save_points(out_path: Path, xyz, rgb, inten):
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"xyz": xyz}
-    if rgb is not None:
-        payload["rgb"] = rgb
-    if inten is not None:
-        payload["intensity"] = inten
-    np.savez_compressed(out_path, **payload)
-    print(f"Saved {xyz.shape[0]} points to {out_path}")
-
-
-def per_scan_out_path(out_path: Path, scan_index: int) -> Path:
-    return out_path.with_name(f"{out_path.stem}_scan_{scan_index:03d}{out_path.suffix}")
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--e57", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--scan-index", type=int, default=0)
-    ap.add_argument(
-        "--all-scans",
-        action="store_true",
-        help="Write one points_scan_XXX.npz file for every data3D scan.",
-    )
     ap.add_argument("--max-points", type=int, default=500000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--metadata", type=Path)
@@ -191,34 +171,28 @@ def main():
         raise SystemExit("pye57 is not installed. Install with: pip install pye57") from exc
 
     e57 = pye57.E57(str(args.e57))
-    try:
-        scan_indexes = range(e57.scan_count) if args.all_scans else [args.scan_index]
-        for scan_index in scan_indexes:
-            xyz, rgb, inten = read_scan_chunked(
-                e57,
-                scan_index,
-                max_points=args.max_points,
-                seed=args.seed + int(scan_index),
-            )
+    xyz, rgb, inten = read_scan_chunked(
+        e57,
+        args.scan_index,
+        max_points=args.max_points,
+        seed=args.seed,
+    )
 
-            if args.apply_scan_pose:
-                xyz = apply_scan_pose(xyz, args.metadata, scan_index)
+    if args.apply_scan_pose:
+        xyz = apply_scan_pose(xyz, args.metadata, args.scan_index)
 
-            out_path = (
-                per_scan_out_path(args.out, scan_index)
-                if args.all_scans
-                else args.out
-            )
-            save_points(out_path, xyz, rgb, inten)
-            if args.all_scans and e57.scan_count == 1:
-                save_points(args.out, xyz, rgb, inten)
-
-        if args.apply_scan_pose:
-            print("Applied data3D scan pose.")
-        else:
-            print("Did not apply data3D scan pose. This is the default for the provided Pentax E57 sample.")
-    finally:
-        e57.close()
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"xyz": xyz}
+    if rgb is not None:
+        payload["rgb"] = rgb
+    if inten is not None:
+        payload["intensity"] = inten
+    np.savez_compressed(args.out, **payload)
+    print(f"Saved {xyz.shape[0]} points to {args.out}")
+    if args.apply_scan_pose:
+        print("Applied data3D scan pose.")
+    else:
+        print("Did not apply data3D scan pose. This is the default for the provided Pentax E57 sample.")
 
 
 if __name__ == "__main__":
