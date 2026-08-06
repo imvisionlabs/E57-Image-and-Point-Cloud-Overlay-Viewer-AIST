@@ -107,8 +107,7 @@ class PrepareWorker(QThread):
                     str(self.e57_path),
                     "--out",
                     str(self.dataset_dir / "points.npz"),
-                    "--scan-index",
-                    "0",
+                    "--all-scans",
                     "--max-points",
                     str(self.max_points),
                 ],
@@ -282,6 +281,8 @@ class MainWindow(QMainWindow):
         self.cameras = []
         self.points_xyz = None
         self.points_rgb = None
+        self.points_cache = {}
+        self.current_points_path = None
         self.current_uv = np.empty((0, 2))
         self.current_xyz = np.empty((0, 3))
         self.corrections = {}
@@ -467,21 +468,59 @@ class MainWindow(QMainWindow):
     def load(self, d: Path):
         self.dataset_dir = d
         meta = json.loads((d / "cameras.json").read_text(encoding="utf-8"))
-        self.cameras = [Camera.from_dict(c) for c in meta["cameras"]]
-        pts = np.load(d / "points.npz")
-        self.points_xyz = pts["xyz"].astype(float)
-        self.points_rgb = pts["rgb"].astype(np.uint8) if "rgb" in pts.files else None
+        camera_rows = []
+        for image_index, row in enumerate(meta["cameras"]):
+            row = dict(row)
+            row.setdefault("image_index", image_index)
+            if not row.get("camera_id"):
+                row["camera_id"] = f"image_{int(row['image_index']):04d}_{row.get('guid') or row.get('name', '')}"
+            camera_rows.append(row)
+        self.cameras = [Camera.from_dict(c) for c in camera_rows]
+        self.points_cache = {}
+        self.current_points_path = None
+        self.points_xyz = None
+        self.points_rgb = None
 
         self.load_corrections_and_settings()
 
         self.combo.blockSignals(True)
         self.combo.clear()
         for c in self.cameras:
-            self.combo.addItem(c.name)
+            self.combo.addItem(self.camera_label(c))
         self.combo.blockSignals(False)
         self.combo.setCurrentIndex(0)
         self.on_camera(0)
-        self.status.setText(f"Loaded {len(self.cameras)} images, {self.points_xyz.shape[0]:,} points")
+        point_count = self.points_xyz.shape[0] if self.points_xyz is not None else 0
+        self.status.setText(f"Loaded {len(self.cameras)} images, {point_count:,} points")
+
+    def camera_label(self, camera: Camera) -> str:
+        label = f"{camera.image_index:04d}: {camera.name}"
+        if camera.scan_index is not None:
+            label += f" [scan {camera.scan_index}]"
+        return label
+
+    def points_path_for_camera(self, camera: Camera) -> Path:
+        candidates = []
+        if camera.points_path:
+            candidates.append(self.dataset_dir / camera.points_path)
+        if camera.scan_index is not None:
+            candidates.append(self.dataset_dir / f"points_scan_{camera.scan_index:03d}.npz")
+        candidates.append(self.dataset_dir / "points.npz")
+        for path in candidates:
+            if path.exists():
+                return path
+        raise FileNotFoundError(f"Point cloud file not found for {camera.name}: {candidates[0]}")
+
+    def load_points_for_camera(self, camera: Camera):
+        path = self.points_path_for_camera(camera)
+        key = str(path.resolve())
+        if key not in self.points_cache:
+            with np.load(path) as pts:
+                xyz = pts["xyz"].astype(float)
+                rgb = pts["rgb"].astype(np.uint8) if "rgb" in pts.files else None
+            self.points_cache[key] = (xyz, rgb)
+        self.points_xyz, self.points_rgb = self.points_cache[key]
+        self.current_points_path = path
 
     def load_corrections_and_settings(self):
         self.corrections = {}
@@ -499,6 +538,15 @@ class MainWindow(QMainWindow):
             self.apply_settings(data.get("settings", {}))
         else:
             self.apply_pentax_defaults(update=False)
+
+    def correction_for_camera(self, camera: Camera) -> Correction:
+        return self.corrections.get(
+            camera.correction_key,
+            self.corrections.get(camera.guid, Correction()),
+        )
+
+    def set_correction_for_camera(self, camera: Camera, correction: Correction):
+        self.corrections[camera.correction_key] = correction
 
     def apply_pentax_defaults(self, update: bool = True):
         """Apply verified defaults for the provided Pentax E57 sample."""
@@ -563,7 +611,7 @@ class MainWindow(QMainWindow):
     def save_corrections(self):
         cam = self.current_camera()
         if cam:
-            self.corrections[cam.guid] = self.pp.correction()
+            self.set_correction_for_camera(cam, self.pp.correction())
         path = self.dataset_dir / "corrections.json"
         payload = {
             "version": APP_VERSION,
@@ -579,13 +627,13 @@ class MainWindow(QMainWindow):
             return
         cam = self.current_camera()
         if cam:
-            self.corrections[cam.guid] = self.pp.correction()
+            self.set_correction_for_camera(cam, self.pp.correction())
         out = self.dataset_dir / "corrected_cameras.json"
         payload = {
             "version": APP_VERSION,
             "note": "CX/CY are corrected by applying delta_cx_px and delta_cy_px to the original E57 principalPointX/Y values. This is metadata export, not an E57 rewrite.",
             "settings": self.current_settings(),
-            "cameras": [c.to_dict(self.corrections.get(c.guid, Correction()), include_original=True) for c in self.cameras],
+            "cameras": [c.to_dict(self.correction_for_camera(c), include_original=True) for c in self.cameras],
         }
         out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         self.status.setText(f"Exported {out}\nUse this to verify CX/CY before writing a corrected E57.")
@@ -605,8 +653,14 @@ class MainWindow(QMainWindow):
         cam = self.current_camera()
         if not cam or not self.dataset_dir:
             return
-        self.overlay.set_image(self.dataset_dir / cam.image_path)
-        self.pp.set_camera_and_correction(cam, self.corrections.get(cam.guid, Correction()))
+        try:
+            self.load_points_for_camera(cam)
+            self.overlay.set_image(self.dataset_dir / cam.image_path)
+        except Exception as e:
+            self.status.setText(f"Failed to load camera data:\n{e}")
+            QMessageBox.warning(self, "Failed to load camera data", str(e))
+            return
+        self.pp.set_camera_and_correction(cam, self.correction_for_camera(cam))
         self.update_projection()
 
     def update_overlay(self):
@@ -646,7 +700,7 @@ class MainWindow(QMainWindow):
         if cam is None or self.points_xyz is None:
             return
         corr = self.pp.correction()
-        self.corrections[cam.guid] = corr
+        self.set_correction_for_camera(cam, corr)
         mode, fs = self.current_convention()
         uv, mask, depth = project_points(
             self.points_xyz,
@@ -676,7 +730,8 @@ class MainWindow(QMainWindow):
             f"CX/CY={cx_corr:.3f}, {cy_corr:.3f} px "
             f"(delta {corr.delta_cx_px:+.3f}, {corr.delta_cy_px:+.3f})\n"
             f"mode={mode}, front={'-Z' if fs < 0 else '+Z'}, "
-            f"flip_v={self.flip_v.isChecked()}, z_buffer={self.zbuf.isChecked()}"
+            f"flip_v={self.flip_v.isChecked()}, z_buffer={self.zbuf.isChecked()}\n"
+            f"points={self.current_points_path.name if self.current_points_path else '-'}"
         )
 
     def on_click(self, u, v):

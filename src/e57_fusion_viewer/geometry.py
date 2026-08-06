@@ -40,6 +40,15 @@ class Camera:
     cy: float
     rotation_wxyz: Tuple[float, float, float, float]
     translation_xyz: Tuple[float, float, float]
+    camera_id: str = ""
+    image_index: int = 0
+    associated_data3d_guid: str = ""
+    scan_index: int | None = None
+    points_path: str = "points.npz"
+
+    @property
+    def correction_key(self) -> str:
+        return self.camera_id or self.guid
 
     @property
     def fx(self) -> float:
@@ -59,9 +68,14 @@ class Camera:
         cx_out = self.corrected_cx(correction)
         cy_out = self.corrected_cy(correction)
         d = {
+            "camera_id": self.correction_key,
+            "image_index": int(self.image_index),
             "guid": self.guid,
             "name": self.name,
             "image_path": self.image_path,
+            "associated_data3d_guid": self.associated_data3d_guid,
+            "scan_index": self.scan_index,
+            "points_path": self.points_path,
             "width": int(self.width),
             "height": int(self.height),
             "focal_length_mm": float(self.focal_length_mm),
@@ -81,6 +95,13 @@ class Camera:
 
     @classmethod
     def from_dict(cls, d: Dict) -> "Camera":
+        scan_index_raw = d.get("scan_index", None)
+        scan_index = int(scan_index_raw) if scan_index_raw is not None else None
+        image_index = int(d.get("image_index", 0))
+        camera_id = str(d.get("camera_id") or d.get("guid", "") or f"image_{image_index:04d}")
+        points_path = d.get("points_path")
+        if not points_path:
+            points_path = f"points_scan_{scan_index:03d}.npz" if scan_index is not None else "points.npz"
         return cls(
             guid=d["guid"], name=d["name"], image_path=d["image_path"],
             width=int(d["width"]), height=int(d["height"]),
@@ -89,6 +110,11 @@ class Camera:
             cx=float(d["cx"]), cy=float(d["cy"]),
             rotation_wxyz=tuple(float(x) for x in d["rotation_wxyz"]),
             translation_xyz=tuple(float(x) for x in d["translation_xyz"]),
+            camera_id=camera_id,
+            image_index=image_index,
+            associated_data3d_guid=str(d.get("associated_data3d_guid", "")),
+            scan_index=scan_index,
+            points_path=str(points_path),
         )
 
 def quat_wxyz_to_rotmat(q_wxyz) -> np.ndarray:
