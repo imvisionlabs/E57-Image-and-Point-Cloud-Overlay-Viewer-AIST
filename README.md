@@ -1,6 +1,19 @@
-# E57 Fusion Viewer
+# E57-Image-and-Point-Cloud-Overlay-Viewer
 
 E57ファイルに含まれる点群・画像・pinhole camera情報を読み出し、画像上に点群を重ねて確認するWindows向けViewerです。
+
+## Windows実行ファイルを起動する
+
+配布されたZIPファイルから、次の手順でViewerを起動できます。PythonやCondaのインストールは不要です。
+
+1. 受け取ったZIPファイルを右クリックし、`すべて展開` を選びます。
+2. 展開された `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
+3. フォルダ内の `E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。
+4. Viewerが開いたら、`Open E57 and prepare` から表示したいE57ファイルを選択します。
+
+ZIPファイルを開いた状態のままEXEを実行しないでください。また、EXEだけを別の場所へ移動すると起動できません。`_internal` フォルダを含む配布フォルダ全体を同じ場所に置いて使用してください。
+
+「組織のDevice Guardポリシーによってブロックされました」と表示された場合は、セキュリティ設定を変更せず、組織のサポート担当者へViewerの利用許可を依頼してください。
 
 ## 主な機能
 
@@ -10,12 +23,13 @@ E57ファイルに含まれる点群・画像・pinhole camera情報を読み出
 - 点群・画像の透明度、点サイズ、表示点数を調整
 - 画像上をクリックして、最寄り投影点のXYZ座標を表示
 - 前処理済みデータセットの再読み込み
+- 画面サイズに合わせたウィンドウ・操作パネルの自動調整
 - PyInstallerによるWindows実行ファイルの作成
 
 ## 動作環境
 
-- Windows 10 / 11
-- Anaconda または Miniconda
+- EXE版: Windows 10 / 11（Python・Condaは不要）
+- ソースから起動する場合: Anaconda または Miniconda
 - E57ファイルと前処理結果を保存できる空き容量
 
 ## リポジトリを取得する
@@ -168,21 +182,34 @@ pip install -e .
 
 手動で投影規約や主点を補正する機能はありません。別の規約で出力されたE57では、出力元の仕様確認または変換処理が必要です。
 
-## Windows実行ファイルを作成する
+## 開発者向け：ビルド方法
+
+ソースから配布用フォルダを作成する場合に使用します。ビルド用PCには64-bit版Python 3.11が必要です。`build_exe.bat` は利用可能なPythonを自動検出し、通常はリポジトリ内にビルド専用の `.build-venv` を作成して、必要なパッケージのインストールからPyInstallerの実行まで行います。
 
 ```bat
+build_exe.bat
+```
+
+新しく `.build-venv` を作成する場合、初回ビルドではパッケージをダウンロードするためインターネット接続が必要です。2回目以降は正常な `.build-venv` を再利用します。
+
+ビルド完了時には、Viewer本体、QtのWindows用プラグイン、E57前処理ツール、pye57のネイティブモジュールが含まれていることを静的に確認します。これらの確認に失敗した場合は、配布可能なビルドとして成功扱いにはなりません。
+
+生成したEXEを使った依存関係テストは、次のように明示的に有効化できます。組織のDevice Guardなどが未署名EXEの実行を制限しているPCでは、このテストを有効にしないでください。
+
+```bat
+set E57_RUN_EXE_SMOKE_TEST=1
 build_exe.bat
 ```
 
 成功すると、次の配布用フォルダが作成されます。
 
 ```text
-dist\E57FusionViewer\
-  E57FusionViewer.exe
+dist\E57-Image-and-Point-Cloud-Overlay-Viewer\
+  E57-Image-and-Point-Cloud-Overlay-Viewer.exe
   _internal\
 ```
 
-配布時は `dist\E57FusionViewer` フォルダ全体をZIP化してください。
+生成物の配布・起動方法は、README冒頭の「Windows実行ファイルを起動する」を参照してください。
 
 ## 完全固定した環境を使う場合
 

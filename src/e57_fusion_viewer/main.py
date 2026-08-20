@@ -12,8 +12,8 @@ from PIL import Image, ImageFile
 # Some scanners (e.g. the S20 sample) write JPEGs into the E57 without the
 # trailing EOI marker. The pixel data is complete, so decode them anyway.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-from PySide6.QtCore import Qt, QPointF, Signal, QThread
-from PySide6.QtGui import QImage, QPainter, QPen, QColor
+from PySide6.QtCore import Qt, QPointF, Signal, QThread, QTimer
+from PySide6.QtGui import QIcon, QImage, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QSlider,
     QSpinBox,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -34,7 +36,9 @@ from PySide6.QtWidgets import (
 from .geometry import Camera, project_points, nearest_projected_point
 
 
+APP_NAME = "E57-Image-and-Point-Cloud-Overlay-Viewer"
 APP_VERSION = "v8"
+APP_ICON = Path("assets") / "imvisionlabs-main-logoonly.png"
 
 
 class PrepareWorker(QThread):
@@ -61,9 +65,11 @@ class PrepareWorker(QThread):
 
         This avoids calling ``sys.executable`` as a Python interpreter, which is
         important after PyInstaller packaging because ``sys.executable`` becomes
-        E57FusionViewer.exe.
+        the packaged Viewer executable.
         """
-        self.message.emit(f"{step_name}...\n{script} " + " ".join(args))
+        # Keep the GUI message short. Full command lines can contain long,
+        # unbroken Windows paths that make QProgressDialog grow off-screen.
+        self.message.emit(f"{step_name}...")
         if not script.exists():
             raise RuntimeError(f"Tool script not found: {script}")
 
@@ -118,7 +124,8 @@ class OverlayWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setMinimumSize(900, 700)
+        self.setMinimumSize(320, 240)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.image = None
         self.uv = np.empty((0, 2))
         self.rgb = None
@@ -195,8 +202,19 @@ class OverlayWidget(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self, dataset_dir: Optional[Path] = None):
         super().__init__()
-        self.setWindowTitle(f"E57 Fusion Viewer MVP {APP_VERSION}")
-        self.resize(1500, 920)
+        self.setWindowTitle(APP_NAME)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            self.resize(
+                min(1500, int(available.width() * 0.92)),
+                min(920, int(available.height() * 0.90)),
+            )
+            frame = self.frameGeometry()
+            frame.moveCenter(available.center())
+            self.move(frame.topLeft())
+        else:
+            self.resize(1200, 760)
         self.dataset_dir = None
         self.cameras = []
         self.points_xyz = None
@@ -215,9 +233,18 @@ class MainWindow(QMainWindow):
         self.overlay.clicked_image.connect(self.on_click)
         ml.addWidget(self.overlay, 1)
 
+        side_scroll = QScrollArea()
+        side_scroll.setWidgetResizable(True)
+        side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        side_scroll.setMinimumWidth(300)
+        side_scroll.setMaximumWidth(420)
+        side_scroll.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+
         side = QWidget()
+        side.setMinimumWidth(280)
         sl = QVBoxLayout(side)
-        ml.addWidget(side, 0)
+        side_scroll.setWidget(side)
+        ml.addWidget(side_scroll, 0)
 
         open_btn = QPushButton("Open prepared dataset")
         open_btn.clicked.connect(self.choose)
@@ -228,6 +255,9 @@ class MainWindow(QMainWindow):
         sl.addWidget(open_e57_btn)
 
         self.combo = QComboBox()
+        self.combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo.setMinimumContentsLength(18)
+        self.combo.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.combo.currentIndexChanged.connect(self.on_camera)
         sl.addWidget(QLabel("Image"))
         sl.addWidget(self.combo)
@@ -267,6 +297,7 @@ class MainWindow(QMainWindow):
 
         self.status = QLabel("No dataset loaded")
         self.status.setWordWrap(True)
+        self.status.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         sl.addWidget(self.status)
         sl.addStretch(1)
 
@@ -303,6 +334,16 @@ class MainWindow(QMainWindow):
         self.prepare_dialog.setMinimumDuration(0)
         self.prepare_dialog.setAutoClose(False)
         self.prepare_dialog.setAutoReset(False)
+        dialog_width = min(520, max(360, int(self.width() * 0.7)))
+        screen = self.screen()
+        if screen is not None:
+            dialog_width = min(dialog_width, max(280, screen.availableGeometry().width() - 80))
+        self.prepare_dialog.setFixedWidth(dialog_width)
+        self.prepare_dialog.setMinimumHeight(160)
+        progress_label = self.prepare_dialog.findChild(QLabel)
+        if progress_label is not None:
+            progress_label.setWordWrap(True)
+            progress_label.setFixedWidth(max(220, dialog_width - 60))
         self.centralWidget().setEnabled(False)
         self.prepare_dialog.show()
 
@@ -315,15 +356,19 @@ class MainWindow(QMainWindow):
         self.prepare_worker.succeeded.connect(self.on_prepare_success)
         self.prepare_worker.failed.connect(self.on_prepare_failed)
         self.prepare_worker.finished.connect(self.on_prepare_finished)
-        self.prepare_worker.start()
+        # Let Qt paint the modal dialog before the Python-heavy extraction
+        # starts in the worker thread. Without this, Windows may show a large
+        # unpainted black area until the worker releases the GIL.
+        QApplication.processEvents()
+        QTimer.singleShot(0, self.prepare_worker.start)
 
     def on_prepare_message(self, text: str):
         self.status.setText(text)
         if self.prepare_dialog is not None:
-            last = text.splitlines()[-1] if text else "E57を前処理中です..."
-            if len(last) > 120:
-                last = last[:117] + "..."
-            self.prepare_dialog.setLabelText("E57を前処理中です...\n" + last)
+            step = text.splitlines()[0] if text else "処理を開始しています..."
+            if len(step) > 80:
+                step = step[:77] + "..."
+            self.prepare_dialog.setLabelText("E57を前処理中です...\n" + step)
 
     def on_prepare_success(self, dataset_dir: str):
         self.load(Path(dataset_dir))
@@ -463,6 +508,13 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
+    app.setApplicationVersion(APP_VERSION.removeprefix("v"))
+    app.setOrganizationName("imvisionlabs")
+    icon_path = PrepareWorker.project_root() / APP_ICON
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     win = MainWindow(Path(sys.argv[1]) if len(sys.argv) > 1 else None)
     win.show()
     return app.exec()
