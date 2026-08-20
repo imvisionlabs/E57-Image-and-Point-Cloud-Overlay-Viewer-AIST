@@ -7,12 +7,15 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFile
+
+# Some scanners (e.g. the S20 sample) write JPEGs into the E57 without the
+# trailing EOI marker. The pixel data is complete, so decode them anyway.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 from PySide6.QtCore import Qt, QPointF, Signal, QThread
 from PySide6.QtGui import QImage, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
@@ -24,23 +27,14 @@ from PySide6.QtWidgets import (
     QProgressDialog,
     QSlider,
     QSpinBox,
-    QDoubleSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from .geometry import Camera, Correction, project_points, projection_stats, nearest_projected_point
+from .geometry import Camera, project_points, nearest_projected_point
 
 
 APP_VERSION = "v8"
-
-# The first convention is the default verified with the provided Pentax E57 sample.
-CONVENTIONS = [
-    ("E57 pose=cam→world, front=-Z  ※推奨", "cam2world_inv", -1),
-    ("E57 pose=cam→world, front=+Z", "cam2world_inv", +1),
-    ("raw pose=world→cam, front=-Z", "raw_world2cam", -1),
-    ("raw pose=world→cam, front=+Z", "raw_world2cam", +1),
-]
 
 
 class PrepareWorker(QThread):
@@ -134,7 +128,12 @@ class OverlayWidget(QWidget):
         self.rect_img = (0, 0, 1, 1)
 
     def set_image(self, path: Path):
-        im = Image.open(path).convert("RGB")
+        # Pillow's flag is process-global and may be reset by another import or
+        # by packaged-app initialization. Set it immediately before decoding as
+        # some E57 scanners store otherwise valid JPEGs without a complete tail.
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        with Image.open(path) as source:
+            im = source.convert("RGB")
         w, h = im.size
         data = im.tobytes("raw", "RGB")
         self.image = QImage(data, w, h, 3 * w, QImage.Format_RGB888).copy()
@@ -193,85 +192,6 @@ class OverlayWidget(QWidget):
             )
 
 
-class PrincipalPointPanel(QWidget):
-    changed = Signal()
-
-    def __init__(self):
-        super().__init__()
-        self.camera: Optional[Camera] = None
-        self.e57_label = QLabel("E57 CX/CY: -")
-        self.delta_label = QLabel("Delta CX/CY: -")
-        self.corrected_cx = QDoubleSpinBox()
-        self.corrected_cy = QDoubleSpinBox()
-        for b in (self.corrected_cx, self.corrected_cy):
-            b.setRange(-10000.0, 10000.0)
-            b.setSingleStep(0.1)
-            b.setDecimals(3)
-            b.setSuffix(" px")
-            b.valueChanged.connect(self._on_value_changed)
-
-        lay = QFormLayout(self)
-        lay.addRow(self.e57_label)
-        lay.addRow("Corrected CX", self.corrected_cx)
-        lay.addRow("Corrected CY", self.corrected_cy)
-        lay.addRow(self.delta_label)
-        reset = QPushButton("Reset CX/CY to E57 values")
-        reset.clicked.connect(self.reset_to_e57)
-        lay.addRow(reset)
-
-    def _on_value_changed(self):
-        self._refresh_delta_label()
-        self.changed.emit()
-
-    def _refresh_delta_label(self):
-        if self.camera is None:
-            self.e57_label.setText("E57 CX/CY: -")
-            self.delta_label.setText("Delta CX/CY: -")
-            return
-        dx = self.corrected_cx.value() - self.camera.cx
-        dy = self.corrected_cy.value() - self.camera.cy
-        self.e57_label.setText(f"E57 CX/CY: {self.camera.cx:.3f}, {self.camera.cy:.3f} px")
-        self.delta_label.setText(f"Delta CX/CY: {dx:+.3f}, {dy:+.3f} px")
-
-    def set_camera_and_correction(self, camera: Camera, corr: Correction):
-        self.camera = camera
-        old = self.blockSignals(True)
-        wold = [self.corrected_cx.blockSignals(True), self.corrected_cy.blockSignals(True)]
-        try:
-            margin = max(camera.width, camera.height)
-            self.corrected_cx.setRange(-margin, camera.width + margin)
-            self.corrected_cy.setRange(-margin, camera.height + margin)
-            self.corrected_cx.setValue(float(camera.cx + corr.delta_cx_px))
-            self.corrected_cy.setValue(float(camera.cy + corr.delta_cy_px))
-        finally:
-            self.corrected_cx.blockSignals(wold[0])
-            self.corrected_cy.blockSignals(wold[1])
-            self.blockSignals(old)
-        self._refresh_delta_label()
-        self.changed.emit()
-
-    def correction(self) -> Correction:
-        if self.camera is None:
-            return Correction()
-        return Correction(
-            delta_cx_px=float(self.corrected_cx.value() - self.camera.cx),
-            delta_cy_px=float(self.corrected_cy.value() - self.camera.cy),
-        )
-
-    def reset_to_e57(self):
-        if self.camera is None:
-            return
-        old = [self.corrected_cx.blockSignals(True), self.corrected_cy.blockSignals(True)]
-        try:
-            self.corrected_cx.setValue(float(self.camera.cx))
-            self.corrected_cy.setValue(float(self.camera.cy))
-        finally:
-            self.corrected_cx.blockSignals(old[0])
-            self.corrected_cy.blockSignals(old[1])
-        self._refresh_delta_label()
-        self.changed.emit()
-
-
 class MainWindow(QMainWindow):
     def __init__(self, dataset_dir: Optional[Path] = None):
         super().__init__()
@@ -285,7 +205,6 @@ class MainWindow(QMainWindow):
         self.current_points_path = None
         self.current_uv = np.empty((0, 2))
         self.current_xyz = np.empty((0, 3))
-        self.corrections = {}
         self.prepare_worker = None
         self.prepare_dialog = None
 
@@ -312,37 +231,6 @@ class MainWindow(QMainWindow):
         self.combo.currentIndexChanged.connect(self.on_camera)
         sl.addWidget(QLabel("Image"))
         sl.addWidget(self.combo)
-
-        sl.addWidget(QLabel("Projection convention"))
-        self.conv = QComboBox()
-        for label, _mode, _fs in CONVENTIONS:
-            self.conv.addItem(label)
-        self.conv.setCurrentIndex(0)
-        self.conv.currentIndexChanged.connect(self.update_projection)
-        sl.addWidget(self.conv)
-
-        self.auto_btn = QPushButton("Auto choose convention")
-        self.auto_btn.clicked.connect(self.auto_choose_convention)
-        sl.addWidget(self.auto_btn)
-
-        self.defaults_btn = QPushButton("Apply Pentax E57 defaults")
-        self.defaults_btn.clicked.connect(self.apply_pentax_defaults)
-        sl.addWidget(self.defaults_btn)
-
-        self.flip_v = QCheckBox("Flip image V axis / vertical mirror  ※このE57では通常ON")
-        self.flip_v.setChecked(True)
-        self.flip_v.stateChanged.connect(self.update_projection)
-        sl.addWidget(self.flip_v)
-
-        self.zbuf = QCheckBox("Use simple Z-buffer")
-        self.zbuf.setChecked(False)
-        self.zbuf.stateChanged.connect(self.update_projection)
-        sl.addWidget(self.zbuf)
-
-        self.pp = PrincipalPointPanel()
-        self.pp.changed.connect(self.update_projection)
-        sl.addWidget(QLabel("Principal point correction"))
-        sl.addWidget(self.pp)
 
         form = QFormLayout()
         self.point_alpha = QSlider(Qt.Horizontal)
@@ -376,14 +264,6 @@ class MainWindow(QMainWindow):
         self.prepare_max_points.setValue(500000)
         form.addRow("prepare max points", self.prepare_max_points)
         sl.addLayout(form)
-
-        save = QPushButton("Save corrections.json + settings")
-        save.clicked.connect(self.save_corrections)
-        sl.addWidget(save)
-
-        export = QPushButton("Export corrected_cameras.json")
-        export.clicked.connect(self.export_corrected_cameras_json)
-        sl.addWidget(export)
 
         self.status = QLabel("No dataset loaded")
         self.status.setWordWrap(True)
@@ -481,8 +361,6 @@ class MainWindow(QMainWindow):
         self.points_xyz = None
         self.points_rgb = None
 
-        self.load_corrections_and_settings()
-
         self.combo.blockSignals(True)
         self.combo.clear()
         for c in self.cameras:
@@ -506,6 +384,9 @@ class MainWindow(QMainWindow):
         if camera.scan_index is not None:
             candidates.append(self.dataset_dir / f"points_scan_{camera.scan_index:03d}.npz")
         candidates.append(self.dataset_dir / "points.npz")
+        # Datasets prepared before points.npz was written for multi-scan files
+        # only have per-scan clouds. Fall back to one so they still open.
+        candidates.extend(sorted(self.dataset_dir.glob("points_scan_*.npz")))
         for path in candidates:
             if path.exists():
                 return path
@@ -522,132 +403,9 @@ class MainWindow(QMainWindow):
         self.points_xyz, self.points_rgb = self.points_cache[key]
         self.current_points_path = path
 
-    def load_corrections_and_settings(self):
-        self.corrections = {}
-        path = self.dataset_dir / "corrections.json"
-        if not path.exists():
-            self.apply_pentax_defaults(update=False)
-            return
-        data = json.loads(path.read_text(encoding="utf-8"))
-        self.corrections = {
-            g: Correction.from_dict(v) for g, v in data.get("corrections", {}).items()
-        }
-
-        saved_version = data.get("version") or data.get("settings", {}).get("app_version")
-        if saved_version == APP_VERSION:
-            self.apply_settings(data.get("settings", {}))
-        else:
-            self.apply_pentax_defaults(update=False)
-
-    def correction_for_camera(self, camera: Camera) -> Correction:
-        return self.corrections.get(
-            camera.correction_key,
-            self.corrections.get(camera.guid, Correction()),
-        )
-
-    def set_correction_for_camera(self, camera: Camera, correction: Correction):
-        self.corrections[camera.correction_key] = correction
-
-    def apply_pentax_defaults(self, update: bool = True):
-        """Apply verified defaults for the provided Pentax E57 sample."""
-        widgets = [self.conv, self.flip_v, self.zbuf, self.point_alpha, self.image_alpha, self.ps, self.maxn]
-        old = [w.blockSignals(True) for w in widgets]
-        try:
-            self.conv.setCurrentIndex(0)
-            self.flip_v.setChecked(True)
-            self.zbuf.setChecked(False)
-            self.point_alpha.setValue(160)
-            self.image_alpha.setValue(255)
-            self.ps.setValue(2)
-            self.maxn.setValue(120000)
-        finally:
-            for w, state in zip(widgets, old):
-                w.blockSignals(state)
-        if update:
-            self.update_projection()
-
-    def current_settings(self):
-        mode, fs = self.current_convention()
-        return {
-            "app_version": APP_VERSION,
-            "projection_convention_index": int(self.conv.currentIndex()),
-            "transform_mode": mode,
-            "forward_sign": int(fs),
-            "flip_v": bool(self.flip_v.isChecked()),
-            "z_buffer": bool(self.zbuf.isChecked()),
-            "point_alpha": int(self.point_alpha.value()),
-            "overlay_alpha": int(self.point_alpha.value()),
-            "image_alpha": int(self.image_alpha.value()),
-            "point_size": int(self.ps.value()),
-            "max_overlay_points": int(self.maxn.value()),
-        }
-
-    def apply_settings(self, settings: dict):
-        if not settings:
-            return
-        widgets = [self.conv, self.flip_v, self.zbuf, self.point_alpha, self.image_alpha, self.ps, self.maxn]
-        old = [w.blockSignals(True) for w in widgets]
-        try:
-            idx = settings.get("projection_convention_index", None)
-            if isinstance(idx, int) and 0 <= idx < len(CONVENTIONS):
-                self.conv.setCurrentIndex(idx)
-            else:
-                mode = settings.get("transform_mode")
-                fs = settings.get("forward_sign")
-                for j, (_label, m, f) in enumerate(CONVENTIONS):
-                    if m == mode and int(f) == int(fs):
-                        self.conv.setCurrentIndex(j)
-                        break
-            self.flip_v.setChecked(bool(settings.get("flip_v", True)))
-            self.zbuf.setChecked(bool(settings.get("z_buffer", False)))
-            self.point_alpha.setValue(int(settings.get("point_alpha", settings.get("overlay_alpha", 160))))
-            self.image_alpha.setValue(int(settings.get("image_alpha", 255)))
-            self.ps.setValue(int(settings.get("point_size", 2)))
-            self.maxn.setValue(int(settings.get("max_overlay_points", 120000)))
-        finally:
-            for w, state in zip(widgets, old):
-                w.blockSignals(state)
-
-    def save_corrections(self):
-        cam = self.current_camera()
-        if cam:
-            self.set_correction_for_camera(cam, self.pp.correction())
-        path = self.dataset_dir / "corrections.json"
-        payload = {
-            "version": APP_VERSION,
-            "settings": self.current_settings(),
-            "correction_type": "principal_point_delta_px",
-            "corrections": {g: c.to_dict() for g, c in self.corrections.items()},
-        }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.status.setText(f"Saved {path}\nPrincipal point corrections will be restored on next launch.")
-
-    def export_corrected_cameras_json(self):
-        if self.dataset_dir is None or not self.cameras:
-            return
-        cam = self.current_camera()
-        if cam:
-            self.set_correction_for_camera(cam, self.pp.correction())
-        out = self.dataset_dir / "corrected_cameras.json"
-        payload = {
-            "version": APP_VERSION,
-            "note": "CX/CY are corrected by applying delta_cx_px and delta_cy_px to the original E57 principalPointX/Y values. This is metadata export, not an E57 rewrite.",
-            "settings": self.current_settings(),
-            "cameras": [c.to_dict(self.correction_for_camera(c), include_original=True) for c in self.cameras],
-        }
-        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.status.setText(f"Exported {out}\nUse this to verify CX/CY before writing a corrected E57.")
-
     def current_camera(self):
         i = self.combo.currentIndex()
         return self.cameras[i] if 0 <= i < len(self.cameras) else None
-
-    def current_convention(self):
-        i = self.conv.currentIndex()
-        if i < 0:
-            i = 0
-        _label, mode, fs = CONVENTIONS[i]
-        return mode, fs
 
     def on_camera(self, idx):
         cam = self.current_camera()
@@ -660,7 +418,6 @@ class MainWindow(QMainWindow):
             self.status.setText(f"Failed to load camera data:\n{e}")
             QMessageBox.warning(self, "Failed to load camera data", str(e))
             return
-        self.pp.set_camera_and_correction(cam, self.correction_for_camera(cam))
         self.update_projection()
 
     def update_overlay(self):
@@ -669,48 +426,11 @@ class MainWindow(QMainWindow):
         self.overlay.point_size = self.ps.value()
         self.overlay.update()
 
-    def auto_choose_convention(self):
-        cam = self.current_camera()
-        if cam is None or self.points_xyz is None:
-            return
-        corr = self.pp.correction()
-        rows = []
-        for idx, (label, mode, fs) in enumerate(CONVENTIONS):
-            st = projection_stats(
-                self.points_xyz,
-                cam,
-                corr,
-                transform_mode=mode,
-                forward_sign=fs,
-                flip_v=self.flip_v.isChecked(),
-            )
-            rows.append((idx, label, st["projected"], st["rate"]))
-        valid = [r for r in rows if 0.0001 < r[3] < 0.95]
-        best = max(valid or rows, key=lambda r: r[2])
-        self.conv.setCurrentIndex(best[0])
-        msg = ["Auto convention result:"]
-        for _idx, label, projected, rate in rows:
-            mark = "* " if _idx == best[0] else "  "
-            msg.append(f"{mark}{label}: {projected:,} pts ({rate:.4%})")
-        self.status.setText("\n".join(msg))
-        self.update_projection()
-
     def update_projection(self):
         cam = self.current_camera()
         if cam is None or self.points_xyz is None:
             return
-        corr = self.pp.correction()
-        self.set_correction_for_camera(cam, corr)
-        mode, fs = self.current_convention()
-        uv, mask, depth = project_points(
-            self.points_xyz,
-            cam,
-            corr,
-            transform_mode=mode,
-            forward_sign=fs,
-            flip_v=self.flip_v.isChecked(),
-            z_buffer=self.zbuf.isChecked(),
-        )
+        uv, mask, _depth = project_points(self.points_xyz, cam)
         xyz = self.points_xyz[mask]
         rgb = self.points_rgb[mask] if self.points_rgb is not None else None
         if uv.shape[0] > self.maxn.value():
@@ -723,14 +443,9 @@ class MainWindow(QMainWindow):
         self.overlay.image_alpha = self.image_alpha.value()
         self.overlay.point_size = self.ps.value()
         self.overlay.set_overlay(uv, rgb)
-        cx_corr = cam.corrected_cx(corr)
-        cy_corr = cam.corrected_cy(corr)
         self.status.setText(
             f"Projected {uv.shape[0]:,} points. fx={cam.fx:.2f}, fy={cam.fy:.2f}\n"
-            f"CX/CY={cx_corr:.3f}, {cy_corr:.3f} px "
-            f"(delta {corr.delta_cx_px:+.3f}, {corr.delta_cy_px:+.3f})\n"
-            f"mode={mode}, front={'-Z' if fs < 0 else '+Z'}, "
-            f"flip_v={self.flip_v.isChecked()}, z_buffer={self.zbuf.isChecked()}\n"
+            f"CX/CY={cam.cx:.3f}, {cam.cy:.3f} px\n"
             f"points={self.current_points_path.name if self.current_points_path else '-'}"
         )
 

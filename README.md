@@ -1,91 +1,180 @@
-# E57 Fusion Viewer MVP v8
+# E57 Fusion Viewer
 
-E57内の点群・画像・pinhole camera情報を展開し、画像上に点群を投影して重畳表示する簡易ソフトウェアです。
+E57ファイルに含まれる点群・画像・pinhole camera情報を読み出し、画像上に点群を重ねて確認するWindows向けViewerです。
 
+## 主な機能
 
-主な機能:
+- `.e57` をGUIから選択して、そのまま前処理・表示
+- 画像と点群の重畳表示
+- 画像ごとに関連するスキャンの点群を自動選択
+- 点群・画像の透明度、点サイズ、表示点数を調整
+- 画像上をクリックして、最寄り投影点のXYZ座標を表示
+- 前処理済みデータセットの再読み込み
+- PyInstallerによるWindows実行ファイルの作成
 
-- `Open E57 and prepare` からE57を選択し、Viewer内で前処理を実行
-- 点群と画像の重畳表示
-- `point alpha` と `image alpha` の独立制御
-- `Corrected CX`, `Corrected CY` を入力して主点ずれをViewer上で補正
-- 補正値を `corrections.json` に保存
-- 補正後のカメラメタデータを `corrected_cameras.json` として出力
-- PyInstallerによるWindows exe配布用設定
+## 動作環境
 
-## Setup with Anaconda
+- Windows 10 / 11
+- Anaconda または Miniconda
+- E57ファイルと前処理結果を保存できる空き容量
 
-### 新規に環境を作成する場合
+## リポジトリを取得する
 
-方法A: `environment.yml` で conda依存 + pip依存(pye57, pyinstaller等)をまとめて構築（推奨・簡単）
-
-```bat
-conda env create -n e57-fusion-viewer -f environment.yml
-conda activate e57-fusion-viewer
-pip install -e .
-```
-
-既に同名環境がある場合は `conda env create` の代わりに以下で更新できます。
+GitHubの `Code` ボタンから `Download ZIP` を選んで展開するか、Gitが使える場合は表示されたURLをコピーして次を実行します。
 
 ```bat
-conda env update -n e57-fusion-viewer -f environment.yml --prune
+git clone <コピーしたリポジトリURL>
 ```
 
-方法B: `environment-win64-explicit.txt` でconda側バイナリを完全固定してから、pipで残りを補完
+以降の操作は、リポジトリのルート（このREADMEがあるフォルダ）で行います。初めて使う場合は **Anaconda Prompt** を開き、`cd` でこのフォルダへ移動してください。
 
 ```bat
-conda create -n e57-fusion-viewer --file environment-win64-explicit.txt
-conda activate e57-fusion-viewer
-pip install -r requirements.txt
-pip install -e .
+cd C:\path\to\e57-fusion-viewer-AIST
 ```
 
-`environment-win64-explicit.txt` はWin64向けのconda-forgeバイナリのみを固定したロックファイルで、`pye57` などのpip専用パッケージは含まれていません。`requirements.txt` で必ず補ってください。
+## クイックスタート（初回のみ）
 
-### 既に `e57-fusion-viewer` 環境を作成済みの場合
+### 1. Conda環境を作成する
 
-v8フォルダで以下を実行してください。
+初回セットアップには、必要なパッケージだけを定義した `environment-minimal.yml` を使用します。
+
+```bat
+conda env create -f environment-minimal.yml
+```
+
+### 2. Conda環境を有効化する
 
 ```bat
 conda activate e57-fusion-viewer
+```
+
+### 3. Viewerをインストールする
+
+```bat
 pip install -e .
 ```
 
-または、
-
-```bat
-install_v8.bat
-```
-
-> `install_v8.bat` / `run_viewer.bat` は環境名 `e57-fusion-viewer` を前提にしています。別名の環境を使う場合は、上記コマンドを手動で実行するか、環境名を `e57-fusion-viewer` に合わせてください。
-
-## Run
+### 4. Viewerを起動する
 
 ```bat
 run_viewer.bat
 ```
 
-Viewerが起動したら、`Open E57 and prepare` から `.e57` を選択できます。
+2回目以降は、リポジトリのルートで `run_viewer.bat` を実行するだけです。このbatファイルが `e57-fusion-viewer` 環境を有効化してViewerを起動します。
 
-## Principal point correction
+## E57ファイルを表示する
 
-右側の `Principal point correction` で、E57内の元のCX/CYを確認しながら、補正後のCX/CYを入力できます。
+1. Viewer右側の `Open E57 and prepare` を押します。
+2. 表示したい `.e57` ファイルを選択します。
+3. 前処理が完了するまで待ちます。大きいE57では時間がかかることがあります。
+4. 前処理が完了すると、最初の画像と点群が自動的に表示されます。
+5. `Image` のプルダウンから別の画像へ切り替えます。
 
-- `Corrected CX`: 補正後の principalPointX [px]
-- `Corrected CY`: 補正後の principalPointY [px]
-- `Delta CX/CY`: E57元値からの差分 [px]
+前処理結果は、元のE57ファイルと同じ場所に次の名前で作成されます。
 
-`Save corrections.json + settings` で補正値と表示設定を保存します。
+```text
+<E57ファイル名>_prepared_dataset\
+  cameras.json
+  images\
+  points.npz
+  points_scan_000.npz  （複数スキャンの場合）
+  points_scan_001.npz
+  ...
+```
 
-`Export corrected_cameras.json` を押すと、補正後のCX/CYを反映した `corrected_cameras.json` を出力します。これはE57本体の書き換えではなく、補正値確認用・次段階のE57再書き出し用メタデータです。
+同じE57を再度確認するときは `Open prepared dataset` を押し、上記の `_prepared_dataset` フォルダを選択すると、前処理を省略できます。
 
-## Build Windows exe
+## 画面の設定項目
+
+| 項目 | 説明 |
+| --- | --- |
+| `point alpha` | 点群の透明度を変更します。 |
+| `image alpha` | 背景画像の透明度を変更します。 |
+| `point size` | 描画する点の大きさを変更します。 |
+| `max overlay points` | 画像に重ねて描画する点数の上限です。値を増やすと密になりますが、描画が重くなります。 |
+| `prepare max points` | E57の各スキャンから前処理時に保存する点数の上限です。値を増やすと精細になりますが、処理時間と使用メモリが増えます。 |
+
+画像上をクリックすると、クリック位置から15 px以内にある最寄り投影点のXYZ座標が右側に表示されます。
+
+## 別の起動方法
+
+Pythonモジュールとして直接起動することもできます。
+
+```bat
+conda activate e57-fusion-viewer
+set PYTHONPATH=%CD%\src
+python -m e57_fusion_viewer.main
+```
+
+前処理済みデータセットを起動時に開く場合は、フォルダのパスを引数に指定します。
+
+```bat
+python -m e57_fusion_viewer.main "C:\path\to\sample_prepared_dataset"
+```
+
+## 既存環境を更新する
+
+依存パッケージの定義が更新された場合は、次を実行します。
+
+```bat
+conda env update -f environment-minimal.yml --prune
+conda activate e57-fusion-viewer
+pip install -e .
+```
+
+`install_v8.bat` でもViewerを再インストールできます。ただし、先に `e57-fusion-viewer` 環境を作成しておく必要があります。
+
+## トラブルシューティング
+
+### `conda` が認識されない
+
+通常のコマンドプロンプトではなく **Anaconda Prompt** を使用してください。それでも認識されない場合は、AnacondaまたはMinicondaがインストールされているか確認してください。
+
+### `EnvironmentNameNotFound: Could not find conda environment: e57-fusion-viewer` と表示される
+
+Conda環境がまだ作成されていません。リポジトリのルートで次を実行してください。
+
+```bat
+conda env create -f environment-minimal.yml
+```
+
+### `ModuleNotFoundError` が表示される
+
+環境を有効化してViewerを再インストールします。
+
+```bat
+conda activate e57-fusion-viewer
+pip install -e .
+```
+
+### E57の前処理に失敗する
+
+- E57ファイルが他のアプリで使用中でないか確認してください。
+- 元のE57と同じフォルダに書き込み権限と十分な空き容量があるか確認してください。
+- 大きいE57でメモリ不足になる場合は、GUIの `prepare max points` を小さくして再実行してください。
+- 同名の `_prepared_dataset` フォルダが壊れている可能性がある場合は、必要に応じて退避してから再実行してください。
+
+### 点群が表示されない、または画像と位置が合わない
+
+画面右下のステータスで、投影点数と使用中の `points*.npz` を確認してください。E57の出力元によって、カメラ姿勢・座標軸・画像とスキャンの関連付けの記録方法が異なる場合があります。その場合、ファイルは読み込めても正しく重ならないことがあります。
+
+このViewerの投影は、検証済みのPentax E57サンプルに合わせて次の規約を使用します。
+
+- カメラ姿勢: camera-to-world
+- カメラ前方: `-Z`
+- カメラ座標の上方向: `+Y`
+- 画像座標の下方向: `+V`
+- 主点: E57に記録された `principalPointX` / `principalPointY` を保持
+
+手動で投影規約や主点を補正する機能はありません。別の規約で出力されたE57では、出力元の仕様確認または変換処理が必要です。
+
+## Windows実行ファイルを作成する
 
 ```bat
 build_exe.bat
 ```
 
-成功すると、以下に配布用フォルダが作成されます。
+成功すると、次の配布用フォルダが作成されます。
 
 ```text
 dist\E57FusionViewer\
@@ -94,3 +183,16 @@ dist\E57FusionViewer\
 ```
 
 配布時は `dist\E57FusionViewer` フォルダ全体をZIP化してください。
+
+## 完全固定した環境を使う場合
+
+`environment-win64-explicit.txt` には、Win64向けのCondaパッケージが固定されています。再現性を優先する場合は次を使用します。
+
+```bat
+conda create -n e57-fusion-viewer --file environment-win64-explicit.txt
+conda activate e57-fusion-viewer
+pip install -r requirements.txt
+pip install -e .
+```
+
+`pye57` などのpipパッケージは明示的ロックファイルに含まれないため、`pip install -r requirements.txt` を省略しないでください。
