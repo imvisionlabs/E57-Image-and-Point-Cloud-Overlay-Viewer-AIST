@@ -2,9 +2,12 @@
 
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules
 
+APP_NAME = 'E57-Image-and-Point-Cloud-Overlay-Viewer'
+
 binaries = []
 datas = [
     ('tools', 'tools'),
+    ('assets', 'assets'),
 ]
 hiddenimports = [
     'pye57',
@@ -40,7 +43,8 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='E57FusionViewer',
+    name=APP_NAME,
+    icon='assets/imvisionlabs-main-logoonly.png',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -60,5 +64,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='E57FusionViewer',
+    name=APP_NAME,
 )
