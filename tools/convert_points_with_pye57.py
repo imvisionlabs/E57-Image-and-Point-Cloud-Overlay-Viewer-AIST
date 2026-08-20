@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 import numpy as np
@@ -87,9 +86,12 @@ def read_scan_chunked(e57, scan_index, max_points, seed, chunk_size=200000):
                 if coordinate_system is COORDINATE_SYSTEMS.SPHERICAL:
                     coordinates = convert_spherical_to_cartesian(coordinates)
                 if header.has_pose():
-                    coordinates = e57.to_global(
+                    # Do not call pye57.to_global here: pyquaternion uses a
+                    # BLAS-backed matrix product which can conflict with Qt's
+                    # DLLs when this tool runs inside the packaged viewer.
+                    coordinates = transform_points(
                         coordinates,
-                        header.rotation,
+                        q2r(header.rotation),
                         header.translation,
                     )
                 xyz_parts.append(coordinates)
@@ -134,17 +136,10 @@ def q2r(q):
     )
 
 
-def apply_scan_pose(xyz, metadata, scan_index):
-    if not metadata or not metadata.exists():
-        raise RuntimeError("--apply-scan-pose requires --metadata prepared_dataset/cameras.json")
-    meta = json.loads(metadata.read_text(encoding="utf-8"))
-    scans = meta.get("data3d", [])
-    if scan_index >= len(scans):
-        return xyz
-    s = scans[scan_index]
-    R = q2r(s.get("rotation_wxyz", [1, 0, 0, 0]))
-    t = np.asarray(s.get("translation_xyz", [0, 0, 0]), dtype=float)
-    return xyz @ R.T + t[None, :]
+def transform_points(xyz, rotation, translation):
+    """Apply a rigid transform without invoking BLAS-backed matrix products."""
+    rotated = np.einsum("ij,kj->ik", xyz, rotation, optimize=False)
+    return rotated + np.asarray(translation, dtype=float)[None, :]
 
 
 def save_points(out_path: Path, xyz, rgb, inten):
@@ -162,6 +157,25 @@ def per_scan_out_path(out_path: Path, scan_index: int) -> Path:
     return out_path.with_name(f"{out_path.stem}_scan_{scan_index:03d}{out_path.suffix}")
 
 
+def combine_scans(parts, max_points: int, seed: int):
+    """Merge per-scan arrays into one cloud, subsampled to max_points.
+
+    Image2D nodes in the E57 files we handle carry no associatedData3DGuid, so a
+    camera cannot be tied to one scan. All scans share a single world frame, so
+    the viewer gets the union of them as points.npz.
+    """
+    xyz = np.concatenate([p[0] for p in parts])
+    rgb = np.concatenate([p[1] for p in parts]) if all(p[1] is not None for p in parts) else None
+    inten = np.concatenate([p[2] for p in parts]) if all(p[2] is not None for p in parts) else None
+    if max_points and xyz.shape[0] > max_points:
+        idx = np.random.default_rng(seed).choice(xyz.shape[0], max_points, replace=False)
+        idx.sort()
+        xyz = xyz[idx]
+        rgb = rgb[idx] if rgb is not None else None
+        inten = inten[idx] if inten is not None else None
+    return xyz, rgb, inten
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--e57", required=True, type=Path)
@@ -174,15 +188,6 @@ def main():
     )
     ap.add_argument("--max-points", type=int, default=500000)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--metadata", type=Path)
-    ap.add_argument(
-        "--apply-scan-pose",
-        action="store_true",
-        help=(
-            "Apply data3D pose from cameras.json. For the provided Pentax sample, "
-            "leave this OFF because pye57 already returns coordinates in the same frame used by images2D."
-        ),
-    )
     args = ap.parse_args()
 
     try:
@@ -193,6 +198,7 @@ def main():
     e57 = pye57.E57(str(args.e57))
     try:
         scan_indexes = range(e57.scan_count) if args.all_scans else [args.scan_index]
+        collected = []
         for scan_index in scan_indexes:
             xyz, rgb, inten = read_scan_chunked(
                 e57,
@@ -201,22 +207,20 @@ def main():
                 seed=args.seed + int(scan_index),
             )
 
-            if args.apply_scan_pose:
-                xyz = apply_scan_pose(xyz, args.metadata, scan_index)
-
             out_path = (
                 per_scan_out_path(args.out, scan_index)
                 if args.all_scans
                 else args.out
             )
             save_points(out_path, xyz, rgb, inten)
-            if args.all_scans and e57.scan_count == 1:
-                save_points(args.out, xyz, rgb, inten)
+            collected.append((xyz, rgb, inten))
 
-        if args.apply_scan_pose:
-            print("Applied data3D scan pose.")
-        else:
-            print("Did not apply data3D scan pose. This is the default for the provided Pentax E57 sample.")
+        if args.all_scans and collected:
+            # points.npz is what the viewer loads when a camera has no scan of
+            # its own, so it must exist for multi-scan files too.
+            save_points(args.out, *combine_scans(collected, args.max_points, args.seed))
+
+        print("Applied each data3D scan pose when present.")
     finally:
         e57.close()
 

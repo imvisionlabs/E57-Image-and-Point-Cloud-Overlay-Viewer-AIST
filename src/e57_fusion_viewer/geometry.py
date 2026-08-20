@@ -1,30 +1,7 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Dict, Tuple
-import math
 import numpy as np
-
-@dataclass
-class Correction:
-    """Viewer-side correction for pinhole principal point.
-
-    Values are stored as pixel offsets from the E57 principal point.
-    corrected_cx = camera.cx + delta_cx_px
-    corrected_cy = camera.cy + delta_cy_px
-    """
-    delta_cx_px: float = 0.0
-    delta_cy_px: float = 0.0
-
-    @classmethod
-    def from_dict(cls, d: Dict) -> "Correction":
-        # Backward/robust loading: ignore old pose-correction keys if present.
-        return cls(
-            delta_cx_px=float(d.get("delta_cx_px", d.get("cx_offset_px", 0.0))),
-            delta_cy_px=float(d.get("delta_cy_px", d.get("cy_offset_px", 0.0))),
-        )
-
-    def to_dict(self) -> Dict:
-        return asdict(self)
 
 @dataclass
 class Camera:
@@ -57,41 +34,6 @@ class Camera:
     @property
     def fy(self) -> float:
         return self.focal_length_mm / self.pixel_height_mm
-
-    def corrected_cx(self, correction: Correction | None = None) -> float:
-        return float(self.cx + (correction.delta_cx_px if correction is not None else 0.0))
-
-    def corrected_cy(self, correction: Correction | None = None) -> float:
-        return float(self.cy + (correction.delta_cy_px if correction is not None else 0.0))
-
-    def to_dict(self, correction: Correction | None = None, include_original: bool = True) -> Dict:
-        cx_out = self.corrected_cx(correction)
-        cy_out = self.corrected_cy(correction)
-        d = {
-            "camera_id": self.correction_key,
-            "image_index": int(self.image_index),
-            "guid": self.guid,
-            "name": self.name,
-            "image_path": self.image_path,
-            "associated_data3d_guid": self.associated_data3d_guid,
-            "scan_index": self.scan_index,
-            "points_path": self.points_path,
-            "width": int(self.width),
-            "height": int(self.height),
-            "focal_length_mm": float(self.focal_length_mm),
-            "pixel_width_mm": float(self.pixel_width_mm),
-            "pixel_height_mm": float(self.pixel_height_mm),
-            "cx": float(cx_out),
-            "cy": float(cy_out),
-            "rotation_wxyz": [float(x) for x in self.rotation_wxyz],
-            "translation_xyz": [float(x) for x in self.translation_xyz],
-        }
-        if include_original:
-            d["original_cx"] = float(self.cx)
-            d["original_cy"] = float(self.cy)
-            d["delta_cx_px"] = float(cx_out - self.cx)
-            d["delta_cy_px"] = float(cy_out - self.cy)
-        return d
 
     @classmethod
     def from_dict(cls, d: Dict) -> "Camera":
@@ -138,110 +80,53 @@ def camera_pose_matrix(camera: Camera) -> np.ndarray:
 
 def _transform_points_row(points: np.ndarray, T: np.ndarray) -> np.ndarray:
     """Column-convention 4x4 T applied to Nx3 points, returned as Nx3."""
-    return points @ T[:3, :3].T + T[:3, 3][None, :]
+    # Avoid NumPy's BLAS-backed ``@`` here. On Windows, importing PySide6 can
+    # change DLL resolution and make an otherwise valid MKL installation fail
+    # when the first matrix multiplication is evaluated (0xc06d007f).
+    rotated = np.einsum("ij,kj->ik", points, T[:3, :3], optimize=False)
+    return rotated + T[:3, 3][None, :]
 
 def invert_se3(T: np.ndarray) -> np.ndarray:
     Ti = np.eye(4, dtype=float)
     R = T[:3,:3]
     t = T[:3,3]
     Ti[:3,:3] = R.T
-    Ti[:3,3] = -(R.T @ t)
+    Ti[:3,3] = -np.einsum("ji,j->i", R, t, optimize=False)
     return Ti
 
-def world_to_camera(
-    points_world: np.ndarray,
-    camera: Camera,
-    transform_mode: str = "cam2world_inv",
-) -> np.ndarray:
-    """
-    transform_mode:
-      cam2world_inv : Interpret E57 pose as camera->world, then invert it. This is the expected E57 convention.
-      raw_world2cam : Interpret the raw E57 pose matrix itself as world->camera. Kept for debugging vendor/exporter differences.
-    """
-    T = camera_pose_matrix(camera)
-    if transform_mode == "cam2world_inv":
-        return _transform_points_row(points_world, invert_se3(T))
-    if transform_mode == "raw_world2cam":
-        return _transform_points_row(points_world, T)
-    raise ValueError(f"Unknown transform_mode: {transform_mode}")
+def world_to_camera(points_world: np.ndarray, camera: Camera) -> np.ndarray:
+    """E57 Image2D pose is camera->world, so invert it to get world->camera."""
+    return _transform_points_row(points_world, invert_se3(camera_pose_matrix(camera)))
 
-def project_points(
-    points_world: np.ndarray,
-    camera: Camera,
-    correction: Correction | None = None,
-    z_min: float = 0.05,
-    transform_mode: str = "cam2world_inv",
-    forward_sign: int = -1,
-    flip_v: bool = False,
-    z_buffer: bool = False,
-):
-    """
-    Project world points to the image plane.
+# Verified against the provided Pentax E57 samples: camera front is -Z and
+# camera +Y points upward, while image +V points downward.
+FORWARD_SIGN = -1
 
-    forward_sign:
-      +1: camera front is +Z
-      -1: camera front is -Z. This matches many E57/projective-camera exports and the user's proven script.
-    """
-    pc = world_to_camera(points_world, camera, transform_mode=transform_mode)
-    x, y, z = pc[:,0], pc[:,1], pc[:,2]
-    zf = float(forward_sign) * z
+def project_points(points_world: np.ndarray, camera: Camera, z_min: float = 0.05):
+    """Project world points to the image plane using the E57 principal point."""
+    pc = world_to_camera(points_world, camera)
+    # Positive distance along the camera's forward direction. The signed E57
+    # camera coordinate itself is negative for points in front of the camera.
+    depth_all = float(FORWARD_SIGN) * pc[:,2]
     eps = 1e-12
-    front = zf > z_min
+    front = depth_all > z_min
     if not np.any(front):
         return np.empty((0,2), dtype=float), front, np.empty((0,), dtype=float)
     idx_front = np.flatnonzero(front)
     pf = pc[front]
-    zff = zf[front]
-    cx = camera.corrected_cx(correction)
-    cy = camera.corrected_cy(correction)
-    u = camera.fx * (pf[:,0] / (zff + eps)) + cx
-    v = camera.fy * (pf[:,1] / (zff + eps)) + cy
-    if flip_v:
-        v = (camera.height - 1) - v
+    depth = depth_all[front]
+    u = camera.cx + camera.fx * (pf[:,0] / (depth + eps))
+    # Preserve principalPointY. Only the camera Y axis changes sign when it is
+    # mapped from camera-up coordinates to the image's downward V axis.
+    v = camera.cy - camera.fy * (pf[:,1] / (depth + eps))
     in_img = (u >= 0) & (u < camera.width) & (v >= 0) & (v < camera.height)
     idx = idx_front[in_img]
     uv = np.column_stack([u[in_img], v[in_img]])
-    depth = zff[in_img]
-
-    if z_buffer and idx.size > 0:
-        # Keep only the nearest point for each image pixel.
-        pix_x = np.floor(uv[:,0]).astype(np.int64)
-        pix_y = np.floor(uv[:,1]).astype(np.int64)
-        pix = pix_y * int(camera.width) + pix_x
-        order = np.lexsort((depth, pix))  # primary=pix, secondary=depth ascending within pixel
-        pix_sorted = pix[order]
-        keep_sorted = np.ones_like(order, dtype=bool)
-        keep_sorted[1:] = pix_sorted[1:] != pix_sorted[:-1]
-        keep = order[keep_sorted]
-        idx = idx[keep]
-        uv = uv[keep]
-        depth = depth[keep]
+    depth = depth[in_img]
 
     mask = np.zeros(points_world.shape[0], dtype=bool)
     mask[idx] = True
     return uv, mask, depth
-
-def projection_stats(
-    points_world: np.ndarray,
-    camera: Camera,
-    correction: Correction | None = None,
-    transform_mode: str = "cam2world_inv",
-    forward_sign: int = -1,
-    flip_v: bool = False,
-):
-    uv, mask, depth = project_points(
-        points_world, camera, correction,
-        transform_mode=transform_mode,
-        forward_sign=forward_sign,
-        flip_v=flip_v,
-        z_buffer=False,
-    )
-    return {
-        "projected": int(mask.sum()),
-        "rate": float(mask.mean()) if mask.size else 0.0,
-        "depth_min": float(depth.min()) if depth.size else None,
-        "depth_max": float(depth.max()) if depth.size else None,
-    }
 
 def nearest_projected_point(click_uv, projected_uv: np.ndarray, projected_xyz: np.ndarray, max_pixel_distance: float = 10.0):
     if projected_uv.size == 0:
