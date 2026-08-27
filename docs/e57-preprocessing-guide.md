@@ -73,6 +73,7 @@ sample_prepared_dataset\
 ## 3. E57からXMLを抽出する
 
 E57には、点群のバイナリデータ、JPEGまたはPNG画像、スキャンやカメラのメタデータ、それぞれの保存位置を示すXMLがまとめて入っています。
+
 <img width="707" height="398" alt="image" src="https://github.com/user-attachments/assets/55b4746e-d3a3-456a-82ce-e3ed476a19ef" />
 画像出典：e57FileReader
 https://jp.mathworks.com/help/lidar/ref/e57filereader.html
