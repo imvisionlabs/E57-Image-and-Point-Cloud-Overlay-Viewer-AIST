@@ -29,7 +29,8 @@ ZIPファイルを開いた状態のままEXEを実行しないでください�
 ## 動作環境
 
 - EXE版: Windows 10 / 11（Python・Condaは不要）
-- ソースから起動する場合: Anaconda または Miniconda
+- ソースから起動する場合: 64-bit版Windows 10 / 11、Anaconda または Miniconda
+- 初回セットアップ時にパッケージを取得できるインターネット接続
 - E57ファイルと前処理結果を保存できる空き容量
 
 ## リポジトリを取得する
@@ -46,14 +47,14 @@ git clone <コピーしたリポジトリURL>
 cd C:\path\to\e57-fusion-viewer-AIST
 ```
 
-## クイックスタート（初回のみ）
+## ソース版の正式セットアップ手順（初回のみ）
+
+Windowsでソース版を使用する場合は、Win64向けのCondaパッケージを固定した `environment-win64-explicit.txt` から環境を作成します。以下が正式な環境構築手順です。すべてリポジトリのルートで実行してください。
 
 ### 1. Conda環境を作成する
 
-初回セットアップには、必要なパッケージだけを定義した `environment-minimal.yml` を使用します。
-
 ```bat
-conda env create -f environment-minimal.yml
+conda create -n e57-fusion-viewer --file environment-win64-explicit.txt
 ```
 
 ### 2. Conda環境を有効化する
@@ -62,13 +63,21 @@ conda env create -f environment-minimal.yml
 conda activate e57-fusion-viewer
 ```
 
-### 3. Viewerをインストールする
+### 3. pip依存パッケージをインストールする
+
+`pye57` など、Condaの明示的ロックファイルに含まれないパッケージをインストールします。この手順は省略しないでください。
 
 ```bat
-pip install -e .
+python -m pip install -r requirements.txt
 ```
 
-### 4. Viewerを起動する
+### 4. Viewerをインストールする
+
+```bat
+python -m pip install -e .
+```
+
+### 5. Viewerを起動する
 
 ```bat
 run_viewer.bat
@@ -160,15 +169,26 @@ python -m e57_fusion_viewer.main "C:\path\to\sample_prepared_dataset"
 
 ## 既存環境を更新する
 
-依存パッケージの定義が更新された場合は、次を実行します。
+ソースコードまたはpip依存パッケージだけが更新された場合は、次を実行します。
 
 ```bat
-conda env update -f environment-minimal.yml --prune
 conda activate e57-fusion-viewer
-pip install -e .
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
-`install_v8.bat` でもViewerを再インストールできます。ただし、先に `e57-fusion-viewer` 環境を作成しておく必要があります。
+`environment-win64-explicit.txt` が更新された場合や環境が壊れた場合は、既存環境を削除し、「ソース版の正式セットアップ手順」に従って作り直してください。環境内に独自に追加したパッケージも削除されるため、必要な場合は事前に記録してください。
+
+```bat
+conda deactivate
+conda env remove -n e57-fusion-viewer
+conda create -n e57-fusion-viewer --file environment-win64-explicit.txt
+conda activate e57-fusion-viewer
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+`install_v8.bat` でもViewerを再インストールできます。ただし、先に正式手順で `e57-fusion-viewer` 環境を作成し、pip依存パッケージをインストールしておく必要があります。
 
 ## トラブルシューティング
 
@@ -181,7 +201,10 @@ pip install -e .
 Conda環境がまだ作成されていません。リポジトリのルートで次を実行してください。
 
 ```bat
-conda env create -f environment-minimal.yml
+conda create -n e57-fusion-viewer --file environment-win64-explicit.txt
+conda activate e57-fusion-viewer
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
 ### `ModuleNotFoundError` が表示される
@@ -190,7 +213,8 @@ conda env create -f environment-minimal.yml
 
 ```bat
 conda activate e57-fusion-viewer
-pip install -e .
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
 ### E57の前処理に失敗する
@@ -243,15 +267,8 @@ dist\E57-Image-and-Point-Cloud-Overlay-Viewer\
 
 生成物の配布・起動方法は、README冒頭の「Windows実行ファイルを起動する」を参照してください。
 
-## 完全固定した環境を使う場合
+## 依存関係ファイルの位置付け
 
-`environment-win64-explicit.txt` には、Win64向けのCondaパッケージが固定されています。再現性を優先する場合は次を使用します。
-
-```bat
-conda create -n e57-fusion-viewer --file environment-win64-explicit.txt
-conda activate e57-fusion-viewer
-pip install -r requirements.txt
-pip install -e .
-```
-
-`pye57` などのpipパッケージは明示的ロックファイルに含まれないため、`pip install -r requirements.txt` を省略しないでください。
+- `environment-win64-explicit.txt`: 正式セットアップで使用するWin64向けConda明示的ロックファイル
+- `requirements.txt`: Conda環境の作成後に必ずインストールするpip依存パッケージ
+- `environment-minimal.yml`、`environment.yml`: 依存関係の保守・参照用。正式セットアップには使用しません
