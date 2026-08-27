@@ -129,8 +129,10 @@ def parse(xml_path: Path, e57_path: Path, out_dir: Path):
     images = out_dir / "images"
     images.mkdir(parents=True, exist_ok=True)
     result = {
-        "source_e57": str(e57_path),
-        "source_xml": str(xml_path),
+        # Keep prepared datasets portable and avoid recording user-specific
+        # absolute paths in cameras.json.
+        "source_e57": e57_path.name,
+        "source_xml": xml_path.name,
         "data3d": [],
         "cameras": [],
     }

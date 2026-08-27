@@ -90,4 +90,3 @@ dependencies:
       - pyinstaller-hooks-contrib==2026.6
       - pyquaternion==0.9.9
       - pywin32-ctypes==0.2.3
-prefix: C:\Users\shiko\anaconda3\envs\e57-fusion-viewer
