@@ -105,24 +105,29 @@ run_viewer.bat
 
 ```mermaid
 flowchart TD
-    A["E57ファイル"] --> B["Open E57 and prepare"]
-    B --> C["Step 1：画像・カメラ情報を抽出"]
-    C --> D["Step 2：全スキャンの点群を変換"]
+    S1["1. E57ファイルを選択<br/>prepare max pointsを指定"]
+    S2["2. 前処理結果フォルダを作成<br/>&lt;E57名&gt;_prepared_dataset"]
+    S3["3. E57ヘッダーを読み<br/>XMLセクションを抽出"]
+    S4["4. data3Dとimages2Dを解析<br/>画像・カメラ・スキャン情報を取得"]
+    S5["5. 全data3Dスキャンを<br/>最大200,000点ずつ読み込む"]
+    S6["6. 座標変換・無効点除外・点数抽出<br/>スキャン姿勢をワールド座標へ適用"]
+    S7["7. スキャン別点群と<br/>全スキャン統合点群を保存"]
+    S8{"8. 画像に対応する<br/>スキャンGUIDがある？"}
+    S9A["対応するpoints_scan_XXX.npzを選択"]
+    S9B["統合したpoints.npzを選択"]
+    S10["9. カメラパラメータで<br/>選択した点群を画像へ投影"]
+    S11["10. 画像と点群を重畳表示"]
 
-    C --> X["e57.xml"]
-    C --> I["images/"]
-    C --> M["cameras.json<br/>カメラ姿勢・内部パラメータ・対応スキャン"]
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
+    S8 -- "ある" --> S9A --> S10
+    S8 -- "ない" --> S9B --> S10
+    S10 --> S11
 
-    D --> PS["points_scan_XXX.npz<br/>スキャンごとの点群"]
-    D --> PA["points.npz<br/>全スキャンの統合点群"]
-
-    M --> S{"画像に対応する<br/>スキャンGUIDがある？"}
-    S -- "ある" --> PS
-    S -- "ない" --> PA
-    I --> V["カメラパラメータで点群を画像へ投影"]
-    PS --> V
-    PA --> V
-    V --> O["画像と点群の重畳表示"]
+    S3 -.-> O1["e57.xml"]
+    S4 -.-> O2["images/"]
+    S4 -.-> O3["cameras.json"]
+    S7 -.-> O4["points_scan_XXX.npz"]
+    S7 -.-> O5["points.npz"]
 ```
 
 ### 1. 画像とカメラ情報を抽出する
