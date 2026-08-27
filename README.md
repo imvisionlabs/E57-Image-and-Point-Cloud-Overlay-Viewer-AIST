@@ -132,8 +132,6 @@ flowchart TD
 
 各処理の詳しい説明は、[初心者向けE57前処理ガイド](docs/e57-preprocessing-guide.md)を参照してください。
 
-今回使用するE57ファイルの座標系・点フィールド・画像関連付けの調査結果は、[入力E57データ一覧](docs/input-data-inventory.md)を参照してください。
-
 ### 1. 画像とカメラ情報を抽出する
 
 `tools\extract_images_from_e57_xml.py` が次の処理を行います。
