@@ -300,4 +300,4 @@ dist\E57-Image-and-Point-Cloud-Overlay-Viewer\
 
 - `environment-win64-explicit.txt`: 正式セットアップで使用するWin64向けConda明示的ロックファイル
 - `requirements.txt`: Conda環境の作成後に必ずインストールするpip依存パッケージ
-- `environment-minimal.yml`、`environment.yml`: 依存関係の保守・参照用。正式セットアップには使用しません
+- `environment.yml`: 依存関係の保守・参照用。正式セットアップには使用しません
