@@ -103,6 +103,28 @@ run_viewer.bat
 
 `Open E57 and prepare` を実行すると、元のE57ファイルと同じ場所に前処理結果フォルダを作成し、次の2段階を順番に実行します。
 
+```mermaid
+flowchart TD
+    A["E57ファイル"] --> B["Open E57 and prepare"]
+    B --> C["Step 1：画像・カメラ情報を抽出"]
+    C --> D["Step 2：全スキャンの点群を変換"]
+
+    C --> X["e57.xml"]
+    C --> I["images/"]
+    C --> M["cameras.json<br/>カメラ姿勢・内部パラメータ・対応スキャン"]
+
+    D --> PS["points_scan_XXX.npz<br/>スキャンごとの点群"]
+    D --> PA["points.npz<br/>全スキャンの統合点群"]
+
+    M --> S{"画像に対応する<br/>スキャンGUIDがある？"}
+    S -- "ある" --> PS
+    S -- "ない" --> PA
+    I --> V["カメラパラメータで点群を画像へ投影"]
+    PS --> V
+    PA --> V
+    V --> O["画像と点群の重畳表示"]
+```
+
 ### 1. 画像とカメラ情報を抽出する
 
 `tools\extract_images_from_e57_xml.py` が次の処理を行います。
