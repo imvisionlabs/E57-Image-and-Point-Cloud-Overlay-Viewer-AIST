@@ -89,14 +89,46 @@ run_viewer.bat
 ```text
 <E57ファイル名>_prepared_dataset\
   cameras.json
+  e57.xml
   images\
   points.npz
-  points_scan_000.npz  （複数スキャンの場合）
-  points_scan_001.npz
+  points_scan_000.npz  （各スキャンの点群）
+  points_scan_001.npz  （スキャンが複数ある場合）
   ...
 ```
 
 同じE57を再度確認するときは `Open prepared dataset` を押し、上記の `_prepared_dataset` フォルダを選択すると、前処理を省略できます。
+
+## E57前処理の内容
+
+`Open E57 and prepare` を実行すると、元のE57ファイルと同じ場所に前処理結果フォルダを作成し、次の2段階を順番に実行します。
+
+### 1. 画像とカメラ情報を抽出する
+
+`tools\extract_images_from_e57_xml.py` が次の処理を行います。
+
+1. E57ヘッダーを読み取り、ページ末尾のチェックサム領域を除外しながらXMLセクションを `e57.xml` として抽出します。
+2. XMLの `data3D` から、各スキャンのGUID、名前、回転、平行移動を読み取ります。
+3. XMLの `images2D` から、姿勢とpinhole camera情報を持つJPEGまたはPNG画像を抽出します。
+4. 焦点距離、画素寸法、画像サイズ、主点から投影用の内部パラメータを整理します。
+5. `associatedData3DGuid` がある画像は対応するスキャンへ関連付け、使用する `points_scan_XXX.npz` を決定します。関連付けがない画像は統合点群の `points.npz` を使用します。
+6. 画像を `images` フォルダへ保存し、カメラ情報と相対ファイルパスを `cameras.json` へ保存します。
+
+`cameras.json` の `source_e57` と `source_xml` にはファイル名だけを記録します。ユーザー名などを含むローカルの絶対パスは保存しません。
+
+### 2. 点群を変換する
+
+`tools\convert_points_with_pye57.py` が次の処理を行います。
+
+1. E57内のすべての `data3D` スキャンを順番に読み込みます。
+2. Cartesian座標はそのまま使用し、Spherical座標はXYZへ変換します。不正点フラグがある点は除外します。
+3. RGBとintensityが記録されている場合は、XYZとあわせて読み込みます。
+4. 大きなスキャンを一度にメモリへ展開せず、最大200,000点ずつ分割して読み込みます。
+5. 点数が `prepare max points` を超えるスキャンは、固定シードを使って再現可能なランダム抽出を行います。
+6. スキャンに姿勢情報がある場合は回転と平行移動を適用し、共通のワールド座標へ変換します。
+7. 各スキャンを `points_scan_XXX.npz` へ保存します。さらに全スキャンを統合し、必要に応じて再度 `prepare max points` まで抽出して `points.npz` へ保存します。
+
+NPZファイルには `xyz` を必ず保存し、元データに存在する場合だけ `rgb` と `intensity` も保存します。GUIの `prepare max points` の初期値は500,000点です。
 
 ## 画面の設定項目
 
