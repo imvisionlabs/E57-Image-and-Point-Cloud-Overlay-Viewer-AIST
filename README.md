@@ -7,8 +7,8 @@ E57ファイルに含まれる点群・画像・pinhole camera情報を読み出
 配布されたZIPファイルから、次の手順でViewerを起動できます。PythonやCondaのインストールは不要です。
 
 1. 受け取ったZIPファイルを右クリックし、`すべて展開` を選びます。
-2. 展開された `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
-3. フォルダ内の `E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。
+2. 展開されたプロジェクトフォルダ内の `dist\E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
+3. `dist\E57-Image-and-Point-Cloud-Overlay-Viewer\E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。アプリケーションは必ず `dist` フォルダ内から起動してください。
 4. Viewerが開いたら、`Open E57 and prepare` から表示したいE57ファイルを選択します。
 
 ZIPファイルを開いた状態のままEXEを実行しないでください。また、EXEだけを別の場所へ移動すると起動できません。`_internal` フォルダを含む配布フォルダ全体を同じ場所に置いて使用してください。
