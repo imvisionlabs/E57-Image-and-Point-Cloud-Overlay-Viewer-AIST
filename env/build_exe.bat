@@ -2,15 +2,15 @@
 setlocal EnableExtensions
 
 rem Always build from the repository root, even when this file is double-clicked.
-pushd "%~dp0"
+pushd "%~dp0.." || exit /b 1
 
-set "BUILD_VENV=%~dp0.build-venv"
+set "BUILD_VENV=%CD%\.build-venv"
 set "LOCAL_BUILD_PYTHON=%BUILD_VENV%\Scripts\python.exe"
 set "BUILD_PYTHON="
 set "BOOTSTRAP_PYTHON="
 set "BUILD_EXIT_CODE=0"
 set "APP_NAME=E57-Image-and-Point-Cloud-Overlay-Viewer"
-set "SPEC_FILE=%APP_NAME%.spec"
+set "SPEC_FILE=%~dp0viewer.spec"
 
 echo ========================================
 echo %APP_NAME% standalone build
@@ -91,7 +91,7 @@ set "BUILD_PYTHON=%LOCAL_BUILD_PYTHON%"
 echo [2/4] Installing build dependencies...
 "%BUILD_PYTHON%" -m pip install --disable-pip-version-check --upgrade pip setuptools wheel
 if errorlevel 1 goto dependency_failed
-"%BUILD_PYTHON%" -m pip install --disable-pip-version-check -r requirements.txt
+"%BUILD_PYTHON%" -m pip install --disable-pip-version-check -r "%~dp0requirements.txt"
 if errorlevel 1 goto dependency_failed
 call :check_ready_python "%BUILD_PYTHON%"
 if errorlevel 1 goto dependency_failed
@@ -107,7 +107,8 @@ echo [2/4] Required build dependencies are available.
 
 :build_application
 echo [3/4] Building the standalone application...
-"%BUILD_PYTHON%" -m PyInstaller "%SPEC_FILE%" --clean --noconfirm
+rem Extended Windows paths also support repositories in deeply nested folders.
+"%BUILD_PYTHON%" -m PyInstaller "%SPEC_FILE%" --clean --noconfirm --distpath "\\?\%CD%\dist" --workpath "\\?\%CD%\build"
 if errorlevel 1 goto build_failed
 
 echo [4/4] Verifying packaged files...
@@ -133,7 +134,7 @@ if defined E57_RUN_EXE_SMOKE_TEST (
 echo.
 echo Build completed successfully.
 echo Output folder:
-echo   %~dp0dist\%APP_NAME%\
+echo   %CD%\dist\%APP_NAME%\
 echo.
 echo Distribute the entire %APP_NAME% folder.
 echo The destination PC does not need Python, Conda, or pip.

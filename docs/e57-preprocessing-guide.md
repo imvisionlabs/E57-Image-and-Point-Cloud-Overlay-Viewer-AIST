@@ -130,6 +130,8 @@ images\
 
 解析したカメラ情報は `cameras.json` へ保存します。
 
+`source_e57` と `source_xml` にはファイル名のみを記録し、ユーザー名などを含むローカルの絶対パスは保存しません。
+
 ## 5. 全スキャンの点群を読み込む
 
 `tools\convert_points_with_pye57.py` が `pye57` を使い、E57内のすべての `data3D` スキャンを順番に読みます。
@@ -315,7 +317,7 @@ NPZには次の配列を保存します。
 
 ## 8. 画像に対応する点群を選ぶ
 
-Viewerは `cameras.json` の `associatedData3DGuid` を確認します。
+前処理時にE57の `associatedData3DGuid` から関連スキャンを特定し、`cameras.json` に点群ファイルの `points_path` を保存します。Viewerはそのパスから使用する点群を選びます。
 
 画像と特定のスキャンが関連付けられている場合は、そのスキャンの点群を使用します。
 
