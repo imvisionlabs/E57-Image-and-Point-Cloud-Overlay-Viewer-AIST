@@ -33,11 +33,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .geometry import Camera, project_points, nearest_projected_point
 
 
 APP_NAME = "E57-Image-and-Point-Cloud-Overlay-Viewer"
-APP_VERSION = "v8"
 APP_ICON = Path("assets") / "imvisionlabs-main-logoonly.png"
 
 
@@ -510,7 +510,7 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
-    app.setApplicationVersion(APP_VERSION.removeprefix("v"))
+    app.setApplicationVersion(__version__)
     app.setOrganizationName("imvisionlabs")
     icon_path = PrepareWorker.project_root() / APP_ICON
     if icon_path.exists():

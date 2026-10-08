@@ -1,13 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+import sys
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules
 
 APP_NAME = 'E57-Image-and-Point-Cloud-Overlay-Viewer'
+ENV_DIR = Path(SPECPATH).resolve()
+PROJECT_ROOT = ENV_DIR.parent
+
+# Conda stores native dependencies outside site-packages. Make them available
+# to PyInstaller even when this spec is used without activating the environment.
+CONDA_DLL_DIR = Path(sys.prefix) / 'Library' / 'bin'
+if os.name == 'nt' and (Path(sys.prefix) / 'conda-meta').is_dir() and CONDA_DLL_DIR.is_dir():
+    os.environ['PATH'] = str(CONDA_DLL_DIR) + os.pathsep + os.environ.get('PATH', '')
 
 binaries = []
 datas = [
-    ('tools', 'tools'),
-    ('assets', 'assets'),
+    (str(PROJECT_ROOT / 'tools'), 'tools'),
+    (str(PROJECT_ROOT / 'assets'), 'assets'),
 ]
 hiddenimports = [
     'pye57',
@@ -24,8 +36,8 @@ except Exception:
 
 
 a = Analysis(
-    ['run_viewer_packaged.py'],
-    pathex=['.', 'src'],
+    [str(ENV_DIR / 'run_viewer_packaged.py')],
+    pathex=[str(PROJECT_ROOT), str(PROJECT_ROOT / 'src')],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -44,7 +56,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name=APP_NAME,
-    icon='assets/imvisionlabs-main-logoonly.png',
+    icon=str(PROJECT_ROOT / 'assets' / 'imvisionlabs-main-logoonly.png'),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
