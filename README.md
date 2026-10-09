@@ -37,24 +37,22 @@ E57ファイルに含まれる点群・画像・カメラ情報を読み出し�
 
 ## Windows実行ファイルから起動する
 
-配布された実行ファイルを使用する場合、PythonやCondaのインストールは不要です。対応OSはWindows 10 / 11です。
+対応OSはWindows 10 / 11（64-bit）です。PythonやCondaのインストールは不要です。
 
-1. 配布ZIPを右クリックし、`すべて展開` を選びます。
-2. 展開先の `dist` フォルダを開き、その中の `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
-
-   ![展開したフォルダ内のdistフォルダ](docs/images/distribution-folder.png)
-
-3. `E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。
+1. [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) の `Assets` からWindows用ZIPをダウンロードします。v0.8.0の場合は `e57-overlay-viewer-0.8.0-windows-x64.zip` です。
+2. ダウンロードしたZIPを右クリックし、`すべて展開` を選びます。
+3. 展開先の `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
+4. `E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。
 
    拡張子が非表示の場合は、末尾の `.exe` が表示されません。種類が「アプリケーション」のファイルを選んでください。
 
    ![配布フォルダ内の実行ファイルと_internalフォルダ](docs/images/viewer-executable.png)
 
-4. 画面右上の `Open E57 and prepare` を押し、表示したいE57ファイルを選びます。
+5. 画面右上の `Open E57 and prepare` を押し、表示したいE57ファイルを選びます。
 
    ![画面右上にあるE57ファイルを開くボタンの位置](docs/images/viewer-open-e57.png)
 
-実行ファイルのフォルダだけを受け取った場合は、そのフォルダ内のEXEを起動してください。ZIPを開いた状態のまま実行せず、`_internal` を含むフォルダ全体を展開して使用します。EXEだけを移動すると起動できません。
+EXEと `_internal` フォルダは同じ場所に置いてください。EXEだけを取り出すと起動できません。`Assets` の `Source code (zip)` はソースコード用で、Windows実行ファイルは含まれません。
 
 「組織のDevice Guardポリシーによってブロックされました」と表示された場合は、組織のサポート担当者へ利用許可を依頼してください。
 
