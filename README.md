@@ -1,19 +1,22 @@
 # E57-Image-and-Point-Cloud-Overlay-Viewer
 
-![E57の画像と点群の重畳表示画面](docs/images/viewer-overlay-screenshot.png)
+**English** | [日本語](README_JP.md)
 
-E57ファイルに含まれる点群・画像・カメラ情報を読み出し、画像上に点群を重ねて確認するWindows向けビューアーです。
+![E57 image with a point cloud overlay](docs/images/viewer-overlay-screenshot.png)
 
-## プロジェクト構成
+A Windows viewer that reads point clouds, images, and camera information from E57 files and overlays the points on images for inspection.
+
+## Project layout
 
 ```text
 .
-├── README.md                  利用方法とプロジェクト概要
-├── run_viewer.bat             ソース版の起動
-├── pyproject.toml             Pythonパッケージ定義
-├── src/e57_fusion_viewer/     ビューアー本体・投影処理
-├── tools/                     E57の画像抽出・点群変換
-├── env/                       環境構築・配布用ビルド
+├── README.md                  English usage guide and project overview
+├── README_JP.md               Japanese usage guide and project overview
+├── run_viewer.bat             Launch the viewer from source
+├── pyproject.toml             Python package definition
+├── src/e57_fusion_viewer/     Viewer and projection code
+├── tools/                     E57 image extraction and point cloud conversion
+├── env/                       Environment setup and distribution build
 │   ├── install.bat
 │   ├── build_exe.bat
 │   ├── requirements.txt
@@ -21,46 +24,46 @@ E57ファイルに含まれる点群・画像・カメラ情報を読み出し�
 │   ├── environment.yml
 │   ├── viewer.spec
 │   └── run_viewer_packaged.py
-├── assets/                    アプリケーションの画像素材
-└── docs/                      各種ガイド・README掲載画像
+├── assets/                    Application image assets
+└── docs/                      Guides (in Japanese) and README images
 ```
 
-`env` には環境の定義・構築用ファイルを格納しています。Conda環境の本体はCondaの管理先に作成されます。
+The `env` directory contains environment definitions and setup files. Conda creates the environment itself in its own managed location.
 
-## 主な機能
+## Main features
 
-- E57ファイルを画面から選択し、画像・カメラ情報・点群の前処理から表示まで実行
-- 画像に関連付けられたスキャンの点群を自動選択して重畳表示
-- 点群と画像の透明度、点サイズ、表示点数を調整
-- 画像上をクリックして、最寄り投影点のXYZ座標を表示
-- 前処理済みデータセットを再利用して読み込み時間を短縮
+- Select an E57 file in the viewer to prepare its images, camera information, and point clouds, then display them.
+- Automatically select and overlay the point cloud from the scan associated with an image.
+- Adjust point and image opacity, point size, and the number of displayed points.
+- Click an image to display the XYZ coordinates of the nearest projected point.
+- Reopen a prepared dataset to skip preprocessing.
 
-## Windows実行ファイルから起動する
+## Run the Windows executable
 
-対応OSはWindows 10 / 11（64-bit）です。PythonやCondaのインストールは不要です。
+Supported systems are 64-bit Windows 10 and 11. Python and Conda are not required.
 
-1. [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) の `Assets` からWindows用ZIPをダウンロードします。v0.8.0の場合は `e57-overlay-viewer-0.8.0-windows-x64.zip` です。
-2. ダウンロードしたZIPを右クリックし、`すべて展開` を選びます。
-3. 展開先の `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
-4. `E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。
+1. Open [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) and download the Windows ZIP from the release's `Assets`. For v0.8.0, the file is `e57-overlay-viewer-0.8.0-windows-x64.zip`.
+2. Right-click the downloaded ZIP and select `Extract All`.
+3. Open the `E57-Image-and-Point-Cloud-Overlay-Viewer` folder in the extracted files.
+4. Double-click `E57-Image-and-Point-Cloud-Overlay-Viewer.exe`.
 
-   拡張子が非表示の場合は、末尾の `.exe` が表示されません。種類が「アプリケーション」のファイルを選んでください。
+   If file extensions are hidden, `.exe` will not appear at the end of the name. Select the file whose type is "Application."
 
-   ![配布フォルダ内の実行ファイルと_internalフォルダ](docs/images/viewer-executable.png)
+   ![Executable and _internal folder in the distribution folder](docs/images/viewer-executable.png)
 
-5. 画面右上の `Open E57 and prepare` を押し、表示したいE57ファイルを選びます。
+5. Click `Open E57 and prepare` at the upper right of the viewer, then select the E57 file you want to display.
 
-   ![画面右上にあるE57ファイルを開くボタンの位置](docs/images/viewer-open-e57.png)
+   ![Location of the Open E57 and prepare button](docs/images/viewer-open-e57.png)
 
-EXEと `_internal` フォルダは同じ場所に置いてください。EXEだけを取り出すと起動できません。`Assets` の `Source code (zip)` はソースコード用で、Windows実行ファイルは含まれません。
+Keep the EXE and the `_internal` folder together. The EXE will not start if you move it out of that folder. `Source code (zip)` under `Assets` contains the source code, not the Windows executable.
 
-「組織のDevice Guardポリシーによってブロックされました」と表示された場合は、組織のサポート担当者へ利用許可を依頼してください。
+If your organization's Device Guard policy blocks the application, ask your IT support team to approve its use.
 
-## ソースから起動する
+## Run from source
 
-64-bit版Windows 10 / 11とAnacondaまたはMinicondaを使用します。初回セットアップにはインターネット接続が必要です。
+Use 64-bit Windows 10 or 11 with Anaconda or Miniconda. An internet connection is required for the initial setup.
 
-ソースを取得・展開した後、**Anaconda Prompt** でこのREADMEがあるフォルダに移動し、次を実行してください。
+After cloning or extracting the source, open **Anaconda Prompt**, change to the folder containing this README, and run:
 
 ```bat
 conda create -n e57-fusion-viewer --file env\environment-win64-explicit.txt
@@ -68,77 +71,77 @@ env\install.bat
 run_viewer.bat
 ```
 
-`env\install.bat` は作成済みのConda環境を有効化し、依存パッケージとビューアーをインストールします。2回目以降は `run_viewer.bat` で起動できます。
+`env\install.bat` activates the Conda environment you created and installs the dependencies and viewer. For later launches, run `run_viewer.bat`.
 
-手動でのセットアップ、環境の更新、起動エラーへの対処は [環境構築ガイド](docs/setup.md) を参照してください。
+For manual setup, environment updates, and startup errors, see the [setup guide (Japanese)](docs/setup.md).
 
-## E57ファイルを表示する
+## Display an E57 file
 
-1. 画面右側の `prepare max points` で、前処理時に保存する点数の上限を指定します。初期値は500,000点です。
-2. `Open E57 and prepare` を押し、対象の `.e57` ファイルを選びます。
-3. 前処理が完了すると、最初の画像と点群が表示されます。大きいE57では処理に時間がかかることがあります。
-4. `Image` のプルダウンから表示する画像を切り替えます。
+1. In the right panel, use `prepare max points` to set the maximum number of points saved during preprocessing. The default is 500,000.
+2. Click `Open E57 and prepare` and select the target `.e57` file.
+3. When preprocessing finishes, the first image and point cloud appear. Large E57 files may take some time to process.
+4. Use the `Image` dropdown to switch images.
 
-元のE57ファイルは変更しません。前処理結果は、E57と同じ場所に次の構成で保存します。保存先には書き込み権限と十分な空き容量が必要です。
+The original E57 file is not modified. The prepared dataset is saved next to the E57 file with the following layout. The destination must have write permission and enough free space.
 
 ```text
-<E57ファイル名>_prepared_dataset/
+<E57 filename>_prepared_dataset/
 ├── cameras.json
 ├── e57.xml
 ├── images/
 ├── points.npz
 ├── points_scan_000.npz
-└── points_scan_001.npz   （スキャンが複数ある場合）
+└── points_scan_001.npz   (if there are multiple scans)
 ```
 
-同じE57を再度表示するときは、`Open prepared dataset` からこのフォルダを選択すると、前処理を省略できます。
+To display the same E57 file again without repeating preprocessing, choose this folder with `Open prepared dataset`.
 
-### 画面の設定項目
+### Display controls
 
-| 項目 | 説明 |
+| Control | Description |
 | --- | --- |
-| `point alpha` | 点群の透明度を変更します。 |
-| `image alpha` | 背景画像の透明度を変更します。 |
-| `point size` | 描画する点の大きさを変更します。 |
-| `max overlay points` | 画像に重ねて描画する点数の上限です。値を増やすと密になりますが、描画が重くなります。 |
-| `prepare max points` | 前処理で保存する各スキャンと統合点群の点数の上限です。値を増やすと精細になりますが、処理時間と使用メモリが増えます。 |
+| `point alpha` | Changes the opacity of the point cloud. |
+| `image alpha` | Changes the opacity of the background image. |
+| `point size` | Changes the size of the drawn points. |
+| `max overlay points` | Limits the number of points drawn over the image. A higher value produces a denser overlay but makes drawing slower. |
+| `prepare max points` | Limits the number of points saved for each scan and for the combined cloud during preprocessing. A higher value can show more detail but increases processing time and memory use. |
 
-画像上をクリックすると、クリック位置から15 px以内にある最寄り投影点のXYZ座標が右側に表示されます。
+Clicking the image displays the XYZ coordinates of the nearest projected point within 15 px of the click in the right panel.
 
-### 前処理の概要
+### Preprocessing overview
 
-1. E57からXML・画像・カメラ情報を抽出します。
-2. 点群を最大200,000点ずつ読み込み、無効点の除外・点数の抽出・ワールド座標への変換を行います。
-3. スキャン別点群と統合点群を保存します。
-4. 画像に対応する点群を選び、カメラ情報に基づいて投影します。
+1. Extract XML, images, and camera information from the E57 file.
+2. Read point data in chunks of up to 200,000 points, select points, remove invalid points, and transform coordinates into the world frame.
+3. Save per-scan and combined point clouds.
+4. Select the point cloud for each image and project its points using the camera information.
 
-対応スキャンの関連付けがない画像には、統合点群の `points.npz` を使用します。処理の詳細と座標変換の説明は [E57前処理ガイド](docs/e57-preprocessing-guide.md) を参照してください。
+For an image with no associated scan, the viewer uses the combined `points.npz` cloud. See the [E57 preprocessing guide (Japanese)](docs/e57-preprocessing-guide.md) for processing and coordinate transformation details.
 
-### 表示・前処理のトラブル
+### Display and preprocessing problems
 
-**前処理に失敗する場合**は、E57ファイルが他のアプリで使用中でないか、保存先に書き込み権限と空き容量があるかを確認してください。メモリ不足の場合は `prepare max points` を小さくして再実行します。前処理途中のフォルダが残っている場合は、必要に応じて退避してから再実行してください。
+**If preprocessing fails**, check whether another application is using the E57 file and whether the output location has write permission and enough free space. If memory is insufficient, lower `prepare max points` and try again. If an incomplete output folder remains, move it aside before retrying if needed.
 
-**点群が表示されない、または画像と位置が合わない場合**は、画面右側の投影点数と使用中の `points*.npz` を確認してください。E57の出力元によって、カメラ姿勢・座標軸・スキャンとの関連付けの記録方法が異なるため、正しく重ならない場合があります。
+**If points do not appear or do not align with the image**, check the projected point count and the active `points*.npz` file in the right panel. E57 exporters differ in how they record camera poses, coordinate axes, and scan associations, so some files may not overlay correctly.
 
-本ビューアーの投影は、検証済みのPentax E57サンプルに合わせた次の規約を使用します。
+The viewer uses the following projection convention, verified with Pentax E57 samples:
 
-- カメラ姿勢：camera-to-world
-- カメラ前方：`-Z`、カメラ座標の上方向：`+Y`
-- 画像座標の下方向：`+V`
-- 主点：E57に記録された `principalPointX` / `principalPointY` を使用
+- Camera pose: camera-to-world
+- Camera forward direction: `-Z`; up direction in camera coordinates: `+Y`
+- Down direction in image coordinates: `+V`
+- Principal point: use `principalPointX` and `principalPointY` recorded in the E57 file
 
-対象画像は、姿勢情報とpinhole camera情報を持つJPEGまたはPNGです。投影規約や主点の手動補正機能はありません。異なる規約のE57では、出力元の仕様確認または変換処理が必要です。
+Supported images are JPEG or PNG images with pose and pinhole camera information. The viewer does not provide manual correction of the projection convention or principal point. E57 files that use other conventions may require checking the exporter's specifications or converting the data.
 
-## 配布用ビルド・技術資料
+## Distribution build and technical guides
 
-配布用のWindows実行ファイルは、リポジトリのルートで次を実行して作成します。
+To build the distributable Windows executable, run the following command from the repository root:
 
 ```bat
 env\build_exe.bat
 ```
 
-生成先は `dist\E57-Image-and-Point-Cloud-Overlay-Viewer` です。フォルダ全体を配布してください。
+The output is `dist\E57-Image-and-Point-Cloud-Overlay-Viewer`. Distribute the entire folder.
 
-- [環境構築ガイド](docs/setup.md)：初回セットアップ、更新、依存関係ファイル、起動エラーへの対処
-- [配布用ビルドガイド](docs/build.md)：ビルド環境、生成物、検証方法
-- [E57前処理ガイド](docs/e57-preprocessing-guide.md)：画像抽出、点群変換、カメラ投影
+- [Setup guide (Japanese)](docs/setup.md): initial setup, updates, dependency files, and startup errors
+- [Distribution build guide (Japanese)](docs/build.md): build environment, output, and verification
+- [E57 preprocessing guide (Japanese)](docs/e57-preprocessing-guide.md): image extraction, point cloud conversion, and camera projection
