@@ -10,6 +10,15 @@ APP_NAME = 'E57-Image-and-Point-Cloud-Overlay-Viewer'
 ENV_DIR = Path(SPECPATH).resolve()
 PROJECT_ROOT = ENV_DIR.parent
 
+# Avoid collecting unrelated DLLs from other applications on the caller's PATH.
+# PyInstaller resolves package-local DLLs separately; Conda needs its own bin.
+system_root = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+build_dll_paths = [Path(sys.prefix), Path(sys.base_prefix), system_root / 'System32', system_root]
+for prefix in (Path(sys.prefix), Path(sys.base_prefix)):
+    if (prefix / 'conda-meta').is_dir():
+        build_dll_paths.insert(0, prefix / 'Library' / 'bin')
+os.environ['PATH'] = os.pathsep.join(dict.fromkeys(str(p) for p in build_dll_paths if p.is_dir()))
+
 # Conda stores native dependencies outside site-packages. Make them available
 # to PyInstaller even when this spec is used without activating the environment.
 CONDA_DLL_DIR = Path(sys.prefix) / 'Library' / 'bin'
@@ -41,7 +50,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    hookspath=[str(ENV_DIR / 'hooks')],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],

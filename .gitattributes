@@ -1,0 +1,2 @@
+# Preserve upstream license text and its original whitespace.
+third_party_licenses/*.txt -text -whitespace conflict-marker-size=32

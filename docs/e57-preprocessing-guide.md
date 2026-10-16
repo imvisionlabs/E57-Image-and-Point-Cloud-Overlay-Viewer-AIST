@@ -74,9 +74,9 @@ sample_prepared_dataset\
 
 E57には、点群のバイナリデータ、JPEGまたはPNG画像、スキャンやカメラのメタデータ、それぞれの保存位置を示すXMLがまとめて入っています。
 
-<img width="707" height="398" alt="image" src="https://github.com/user-attachments/assets/55b4746e-d3a3-456a-82ce-e3ed476a19ef" />
-画像出典：e57FileReader
-https://jp.mathworks.com/help/lidar/ref/e57filereader.html
+ヘッダーからXMLの位置を取得し、XMLに記録された参照先から点群・画像データを読み出します。
+
+参考：[MathWorks e57FileReader の説明](https://jp.mathworks.com/help/lidar/ref/e57filereader.html)
 
 最初にE57ファイル先頭の48バイトのヘッダーを読みます。ヘッダーには、XMLの位置、長さ、ページサイズなどが記録されています。
 

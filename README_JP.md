@@ -145,3 +145,14 @@ env\build_exe.bat
 - [環境構築ガイド](docs/setup.md)：初回セットアップ、更新、依存関係ファイル、起動エラーへの対処
 - [配布用ビルドガイド](docs/build.md)：ビルド環境、生成物、検証方法
 - [E57前処理ガイド](docs/e57-preprocessing-guide.md)：画像抽出、点群変換、カメラ投影
+
+## ライセンス
+
+Copyright 2026 National Institute of Advanced Industrial Science and Technology (AIST).
+
+著作権者は国立研究開発法人産業技術総合研究所（産総研）です。
+別途表示がある場合を除き、自作コード・スクリプト・設定ファイル・自作文書には
+[Apache License 2.0](LICENSE)を適用します。ロゴ・商標・画像素材・スクリーンショットに
+写るデータは、この許諾の対象外です。第三者ソフトウェアには、それぞれのライセンスが適用されます。
+同梱部品の表示とQt／PySide6のLGPLv3対応ソース・差し替え方法は
+[第三者ソフトウェアの説明](THIRD_PARTY_NOTICES.md)を参照してください。

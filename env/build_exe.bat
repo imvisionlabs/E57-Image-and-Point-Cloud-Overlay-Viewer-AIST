@@ -91,7 +91,7 @@ set "BUILD_PYTHON=%LOCAL_BUILD_PYTHON%"
 echo [2/4] Installing build dependencies...
 "%BUILD_PYTHON%" -m pip install --disable-pip-version-check --upgrade pip setuptools wheel
 if errorlevel 1 goto dependency_failed
-"%BUILD_PYTHON%" -m pip install --disable-pip-version-check -r "%~dp0requirements.txt"
+"%BUILD_PYTHON%" -m pip install --disable-pip-version-check -r "%~dp0requirements.txt" "PySide6==6.11.1" "shiboken6==6.11.1" "pye57==0.4.19"
 if errorlevel 1 goto dependency_failed
 call :check_ready_python "%BUILD_PYTHON%"
 if errorlevel 1 goto dependency_failed
@@ -106,6 +106,9 @@ if exist "%BUILD_PREFIX%\Library\bin" (
 echo [2/4] Required build dependencies are available.
 
 :build_application
+"%BUILD_PYTHON%" "%~dp0collect_licenses.py" --check
+if errorlevel 1 goto license_files_missing
+
 echo [3/4] Building the standalone application...
 rem Extended Windows paths also support repositories in deeply nested folders.
 "%BUILD_PYTHON%" -m PyInstaller "%SPEC_FILE%" --clean --noconfirm --distpath "\\?\%CD%\dist" --workpath "\\?\%CD%\build"
@@ -119,6 +122,9 @@ if not exist "dist\%APP_NAME%\_internal\tools\convert_points_with_pye57.py" goto
 if not exist "dist\%APP_NAME%\_internal\assets\imvisionlabs-main-logoonly.png" goto icon_missing
 dir /b "dist\%APP_NAME%\_internal\pye57\libe57*.pyd" >nul 2>&1
 if errorlevel 1 goto pye57_missing
+
+"%BUILD_PYTHON%" "%~dp0collect_licenses.py" "dist\%APP_NAME%"
+if errorlevel 1 goto license_files_missing
 
 rem Newly generated unsigned executables may be blocked by corporate Device
 rem Guard policies. Run the executable test only when explicitly requested.
@@ -228,6 +234,12 @@ echo ERROR: The packaged application failed its dependency check.
 echo If Device Guard blocked the unsigned executable, rerun without
 echo E57_RUN_EXE_SMOKE_TEST and ask your administrator about code signing
 echo or an approved allow policy before distributing the application.
+set "BUILD_EXIT_CODE=1"
+
+goto finish
+
+:license_files_missing
+echo ERROR: Required license documents are missing or do not match this build.
 set "BUILD_EXIT_CODE=1"
 
 :finish

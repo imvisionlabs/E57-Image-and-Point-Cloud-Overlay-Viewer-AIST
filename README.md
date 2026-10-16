@@ -145,3 +145,14 @@ The output is `dist\E57-Image-and-Point-Cloud-Overlay-Viewer`. Distribute the en
 - [Setup guide (Japanese)](docs/setup.md): initial setup, updates, dependency files, and startup errors
 - [Distribution build guide (Japanese)](docs/build.md): build environment, output, and verification
 - [E57 preprocessing guide (Japanese)](docs/e57-preprocessing-guide.md): image extraction, point cloud conversion, and camera projection
+
+## License
+
+Copyright 2026 National Institute of Advanced Industrial Science and Technology (AIST).
+
+Unless stated otherwise, the original code, scripts, configuration, and original
+documentation are licensed under the [Apache License 2.0](LICENSE).
+Logos, trademarks, image assets, and data shown in screenshots are excluded from
+this grant. Third-party software retains its own licenses.
+See [third-party notices](THIRD_PARTY_NOTICES.md) for bundled components and
+Qt/PySide6 LGPLv3 source and library replacement information.

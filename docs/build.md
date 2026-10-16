@@ -48,6 +48,9 @@ set E57_RUN_EXE_SMOKE_TEST=
 dist\E57-Image-and-Point-Cloud-Overlay-Viewer\
   E57-Image-and-Point-Cloud-Overlay-Viewer.exe
   _internal\
+  LICENSE
+  THIRD_PARTY_NOTICES.md
+  third_party_licenses\
 ```
 
 `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダ全体を配布してください。EXEと `_internal` フォルダは同じ場所に置く必要があります。配布先PCにPython、Conda、pipをインストールする必要はありません。
@@ -62,3 +65,20 @@ dist\E57-Image-and-Point-Cloud-Overlay-Viewer\
 | `env/requirements.txt` | ビルド環境にインストールする依存パッケージ。 |
 
 ソースコードからViewerを直接起動する場合は[セットアップ手順](setup.md)を参照してください。
+
+## ライセンス文書と対応ソース
+
+ビルド時に `env/collect_licenses.py` がライセンス文書を収集します。
+Qt／PySide6／Shiboken6 6.11.1、pye57 0.4.19に対応する文書を同梱しており、
+新規環境にはこのバージョンをインストールします。既存環境でバージョンが異なる場合は
+停止します。更新する際は、対応する文書とソースも準備してください。
+OpenSSLはビルド環境のバージョンに対応する `OpenSSL-<バージョン>-NOTICES.txt` が必要です。
+
+不要なQt PDF・仮想キーボードのプラグインを除外し、他のアプリのDLLが混入しないよう
+DLL探索用PATHを限定しています。想定外のQtモジュールが含まれる場合は停止します。
+ビルド完了後、`third_party_licenses/INDEX.md` でバージョン・ライセンス文書・DLL配置を
+確認してください。収集に失敗した出力は配布せず、不足を解消して再ビルドしてください。
+
+公開するZIPにはライセンス文書も含め、LGPL対象部品の対応ソースと必要なビルド情報を
+同じRelease等で提供します。詳細は[第三者ソフトウェアの説明](../THIRD_PARTY_NOTICES.md)を
+参照し、ソースの取得とライブラリの差し替え、実データでの操作を確認してから公開してください。
