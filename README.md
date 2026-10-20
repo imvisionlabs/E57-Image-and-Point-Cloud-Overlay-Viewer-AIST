@@ -123,7 +123,7 @@ For an image with no associated scan, the viewer uses the combined `points.npz` 
 
 **If points do not appear or do not align with the image**, check the projected point count and the active `points*.npz` file in the right panel. E57 exporters differ in how they record camera poses, coordinate axes, and scan associations, so some files may not overlay correctly.
 
-The viewer uses the following projection convention, verified with Pentax E57 samples:
+The viewer uses the following projection convention:
 
 - Camera pose: camera-to-world
 - Camera forward direction: `-Z`; up direction in camera coordinates: `+Y`
