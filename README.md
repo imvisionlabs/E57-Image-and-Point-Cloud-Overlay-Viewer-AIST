@@ -42,7 +42,7 @@ The `env` directory contains environment definitions and setup files. Conda crea
 
 Supported systems are 64-bit Windows 10 and 11. Python and Conda are not required.
 
-1. Open [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) and download the Windows ZIP from the release's `Assets`. For v0.8.0, the file is `e57-overlay-viewer-0.8.0-windows-x64.zip`.
+1. Open [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) and download the Windows ZIP from the release's `Assets`. For v0.9.0, the file is `e57-overlay-viewer-0.9.0-windows-x64.zip`.
 2. Right-click the downloaded ZIP and select `Extract All`.
 3. Open the `E57-Image-and-Point-Cloud-Overlay-Viewer` folder in the extracted files.
 4. Double-click `E57-Image-and-Point-Cloud-Overlay-Viewer.exe`.

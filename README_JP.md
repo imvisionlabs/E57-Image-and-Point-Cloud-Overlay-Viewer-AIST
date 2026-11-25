@@ -42,7 +42,7 @@ E57ファイルに含まれる点群・画像・カメラ情報を読み出し�
 
 対応OSはWindows 10 / 11（64-bit）です。PythonやCondaのインストールは不要です。
 
-1. [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) の `Assets` からWindows用ZIPをダウンロードします。v0.8.0の場合は `e57-overlay-viewer-0.8.0-windows-x64.zip` です。
+1. [Releases](https://github.com/imvisionlabs/E57-Image-and-Point-Cloud-Overlay-Viewer-AIST/releases) の `Assets` からWindows用ZIPをダウンロードします。v0.9.0の場合は `e57-overlay-viewer-0.9.0-windows-x64.zip` です。
 2. ダウンロードしたZIPを右クリックし、`すべて展開` を選びます。
 3. 展開先の `E57-Image-and-Point-Cloud-Overlay-Viewer` フォルダを開きます。
 4. `E57-Image-and-Point-Cloud-Overlay-Viewer.exe` をダブルクリックします。
