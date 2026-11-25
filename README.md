@@ -108,6 +108,10 @@ To display the same E57 file again without repeating preprocessing, choose this 
 
 Clicking the image displays the XYZ coordinates of the nearest projected point within 15 px of the click in the right panel.
 
+Use the mouse wheel over a landmark to zoom, middle-drag to pan, and select **Fit image** to return to the full image. The yellow ring marks the selected projected point. The 15 px search radius is measured in original image pixels at every zoom level.
+
+**Export picks to CSV** saves all successful left-clicks in the current session, including picks from earlier images or datasets. Each row identifies the dataset, camera and point-cloud file and includes the clicked and projected image coordinates (pixels), their separation (pixels), and the selected XYZ in the file coordinate system. Export before closing the viewer to keep the picks.
+
 ### Preprocessing overview
 
 1. Extract XML, images, and camera information from the E57 file.
