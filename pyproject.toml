@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "e57-fusion-viewer"
-version = "0.8.0"
+version = "0.9.0"
 description = "Viewer for overlaying E57 point clouds and calibrated images"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "third_party_licenses/*.txt"]

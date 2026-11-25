@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import runpy
 import sys
@@ -12,7 +14,7 @@ from PIL import Image, ImageFile
 # Some scanners (e.g. the S20 sample) write JPEGs into the E57 without the
 # trailing EOI marker. The pixel data is complete, so decode them anyway.
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-from PySide6.QtCore import Qt, QPointF, Signal, QThread, QTimer
+from PySide6.QtCore import Qt, QPointF, QRectF, Signal, QThread, QTimer, QSaveFile, QIODevice
 from PySide6.QtGui import QIcon, QImage, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QApplication,
@@ -39,6 +41,8 @@ from .geometry import Camera, project_points, nearest_projected_point
 
 APP_NAME = "E57-Image-and-Point-Cloud-Overlay-Viewer"
 APP_ICON = Path("assets") / "imvisionlabs-main-logoonly.png"
+CSV_COLUMNS = ("dataset", "camera_id", "image", "points_file", "click_u_px", "click_v_px",
+               "point_u_px", "point_v_px", "distance_px", "x", "y", "z")
 
 
 class PrepareWorker(QThread):
@@ -132,7 +136,11 @@ class OverlayWidget(QWidget):
         self.point_alpha = 160
         self.image_alpha = 255
         self.point_size = 2
-        self.rect_img = (0, 0, 1, 1)
+        self.zoom = 1.0
+        self.center = QPointF()
+        self.drag_start = None
+        self.picked_uv = None
+        self.setToolTip("Wheel to zoom at the cursor. Middle-drag to pan.")
 
     def set_image(self, path: Path):
         # Pillow's flag is process-global and may be reset by another import or
@@ -144,11 +152,43 @@ class OverlayWidget(QWidget):
         w, h = im.size
         data = im.tobytes("raw", "RGB")
         self.image = QImage(data, w, h, 3 * w, QImage.Format_RGB888).copy()
+        self.fit_image()
+
+    def fit_image(self):
+        if self.image is not None:
+            self.zoom = 1.0
+            self.center = QPointF(self.image.width() / 2, self.image.height() / 2)
+            self.update()
+
+    def image_rect(self):
+        iw, ih = self.image.width(), self.image.height()
+        scale = min(self.width() / iw, self.height() / ih) * self.zoom
+        w, h = iw * scale, ih * scale
+        x = self.width() / 2 - self.center.x() * scale
+        y = self.height() / 2 - self.center.y() * scale
+        x = (self.width() - w) / 2 if w <= self.width() else min(0.0, max(self.width() - w, x))
+        y = (self.height() - h) / 2 if h <= self.height() else min(0.0, max(self.height() - h, y))
+        return QRectF(x, y, w, h), scale
+
+    def wheelEvent(self, ev):
+        if self.image is None or not ev.angleDelta().y():
+            return
+        rect, scale = self.image_rect()
+        cursor = ev.position()
+        if not rect.contains(cursor):
+            return
+        anchor = (cursor - rect.topLeft()) / scale
+        new_zoom = min(16.0, max(1.0, self.zoom * 1.5 ** (ev.angleDelta().y() / 120)))
+        new_scale = scale * new_zoom / self.zoom
+        self.zoom = new_zoom
+        self.center = anchor + (QPointF(self.width() / 2, self.height() / 2) - cursor) / new_scale
         self.update()
+        ev.accept()
 
     def set_overlay(self, uv, rgb):
         self.uv = uv
         self.rgb = rgb
+        self.picked_uv = None
         self.update()
 
     def paintEvent(self, ev):
@@ -160,23 +200,20 @@ class OverlayWidget(QWidget):
             p.end()
             return
 
-        iw, ih = self.image.width(), self.image.height()
-        scale = min(self.width() / iw, self.height() / ih)
-        dw, dh = iw * scale, ih * scale
-        x0, y0 = (self.width() - dw) / 2, (self.height() - dh) / 2
-        self.rect_img = (x0, y0, dw, dh)
+        rect, scale = self.image_rect()
+        x0, y0 = rect.x(), rect.y()
         p.setOpacity(max(0.0, min(1.0, self.image_alpha / 255.0)))
-        p.drawImage(
-            int(x0),
-            int(y0),
-            self.image.scaled(int(dw), int(dh), Qt.KeepAspectRatio, Qt.SmoothTransformation),
-        )
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.drawImage(rect, self.image)
         p.setOpacity(1.0)
 
         if self.uv.size:
             step = max(1, self.uv.shape[0] // 120000)
             uv = self.uv[::step]
-            rgb = self.rgb[::step] if self.rgb is not None and len(self.rgb) >= len(self.uv) else None
+            visible = ((uv[:, 0] >= -x0 / scale) & (uv[:, 0] <= (self.width() - x0) / scale)
+                       & (uv[:, 1] >= -y0 / scale) & (uv[:, 1] <= (self.height() - y0) / scale))
+            uv = uv[visible]
+            rgb = self.rgb[::step][visible] if self.rgb is not None and len(self.rgb) >= len(self.uv) else None
             for j, (u, v) in enumerate(uv):
                 if rgb is not None:
                     r, g, b = map(int, rgb[j])
@@ -185,18 +222,35 @@ class OverlayWidget(QWidget):
                     c = QColor(255, 40, 40, self.point_alpha)
                 p.setPen(QPen(c, max(1, self.point_size)))
                 p.drawPoint(QPointF(float(x0 + u * scale), float(y0 + v * scale)))
+        if self.picked_uv is not None:
+            u, v = self.picked_uv
+            center = QPointF(x0 + u * scale, y0 + v * scale)
+            for color, width in ((Qt.black, 4), (Qt.yellow, 2)):
+                p.setPen(QPen(color, width))
+                p.drawEllipse(center, 8, 8)
         p.end()
 
     def mousePressEvent(self, ev):
         if self.image is None:
             return
-        x0, y0, dw, dh = self.rect_img
-        x, y = ev.position().x(), ev.position().y()
-        if x0 <= x <= x0 + dw and y0 <= y <= y0 + dh:
-            self.clicked_image.emit(
-                float((x - x0) * self.image.width() / dw),
-                float((y - y0) * self.image.height() / dh),
-            )
+        rect, scale = self.image_rect()
+        if ev.button() == Qt.MiddleButton:
+            self.drag_start = ev.position()
+        elif ev.button() == Qt.LeftButton and rect.contains(ev.position()):
+            uv = (ev.position() - rect.topLeft()) / scale
+            self.clicked_image.emit(uv.x(), uv.y())
+
+    def mouseMoveEvent(self, ev):
+        if self.drag_start is not None and self.image is not None:
+            rect, scale = self.image_rect()
+            screen_center = QPointF(self.width() / 2, self.height() / 2)
+            self.center = (screen_center - rect.topLeft() + self.drag_start - ev.position()) / scale
+            self.drag_start = ev.position()
+            self.update()
+
+    def mouseReleaseEvent(self, ev):
+        if ev.button() == Qt.MiddleButton:
+            self.drag_start = None
 
 
 class MainWindow(QMainWindow):
@@ -225,6 +279,8 @@ class MainWindow(QMainWindow):
         self.current_xyz = np.empty((0, 3))
         self.prepare_worker = None
         self.prepare_dialog = None
+        self.picks = []
+        self.source_name = ""
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -294,6 +350,15 @@ class MainWindow(QMainWindow):
         self.prepare_max_points.setValue(500000)
         form.addRow("prepare max points", self.prepare_max_points)
         sl.addLayout(form)
+
+        fit = QPushButton("Fit image")
+        fit.clicked.connect(self.overlay.fit_image)
+        sl.addWidget(QLabel("Wheel to zoom  •  Middle-drag to pan"))
+        sl.addWidget(fit)
+        self.export_btn = QPushButton("Export picks to CSV (0)")
+        self.export_btn.setEnabled(False)
+        self.export_btn.clicked.connect(self.export_picks)
+        sl.addWidget(self.export_btn)
 
         self.status = QLabel("No dataset loaded")
         self.status.setWordWrap(True)
@@ -391,7 +456,6 @@ class MainWindow(QMainWindow):
             self.load(Path(d))
 
     def load(self, d: Path):
-        self.dataset_dir = d
         meta = json.loads((d / "cameras.json").read_text(encoding="utf-8"))
         camera_rows = []
         for image_index, row in enumerate(meta["cameras"]):
@@ -401,6 +465,8 @@ class MainWindow(QMainWindow):
                 row["camera_id"] = f"image_{int(row['image_index']):04d}_{row.get('guid') or row.get('name', '')}"
             camera_rows.append(row)
         self.cameras = [Camera.from_dict(c) for c in camera_rows]
+        self.dataset_dir = d
+        self.source_name = meta.get("source_e57") or d.name
         self.points_cache = {}
         self.current_points_path = None
         self.points_xyz = None
@@ -454,6 +520,10 @@ class MainWindow(QMainWindow):
 
     def on_camera(self, idx):
         cam = self.current_camera()
+        self.overlay.image = None
+        self.current_uv = np.empty((0, 2))
+        self.current_xyz = np.empty((0, 3))
+        self.overlay.set_overlay(self.current_uv, None)
         if not cam or not self.dataset_dir:
             return
         try:
@@ -495,15 +565,39 @@ class MainWindow(QMainWindow):
         )
 
     def on_click(self, u, v):
-        _, dist, xyz = nearest_projected_point((u, v), self.current_uv, self.current_xyz, 15.0)
+        index, dist, xyz = nearest_projected_point((u, v), self.current_uv, self.current_xyz, 15.0)
         if xyz is None:
+            self.overlay.picked_uv = None
             self.status.setText(f"Clicked ({u:.1f}, {v:.1f}); no projected point within 15 px")
         else:
+            cam = self.current_camera()
+            point_uv = self.current_uv[index]
+            self.overlay.picked_uv = tuple(point_uv)
+            self.picks.append((self.source_name, cam.camera_id, cam.name, self.current_points_path.name,
+                               u, v, *point_uv, dist, *xyz))
+            self.export_btn.setEnabled(True)
+            self.export_btn.setText(f"Export picks to CSV ({len(self.picks)})")
             self.status.setText(
                 f"Clicked ({u:.1f}, {v:.1f})\n"
                 f"Nearest distance: {dist:.2f} px\n"
                 f"XYZ: ({xyz[0]:.4f}, {xyz[1]:.4f}, {xyz[2]:.4f})"
             )
+        self.overlay.update()
+
+    def export_picks(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export picked correspondences", "picks.csv", "CSV (*.csv)")
+        if not path:
+            return
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(CSV_COLUMNS)
+        writer.writerows(self.picks)
+        data = output.getvalue().encode("utf-8-sig")
+        target = QSaveFile(path)
+        if not target.open(QIODevice.WriteOnly) or target.write(data) != len(data) or not target.commit():
+            QMessageBox.warning(self, "CSV export failed", target.errorString())
+            return
+        self.statusBar().showMessage(f"Saved {len(self.picks)} picks to {Path(path).name}", 5000)
 
 
 def main():
